@@ -1,0 +1,295 @@
+{
+  "users": [
+    {
+      "id": "admin-1",
+      "name": "Elieyd Barreto",
+      "email": "admin@elieyd.com.br",
+      "phone": "(85) 99999-9999",
+      "role": "admin",
+      "createdAt": "2026-05-21T19:56:28.528Z",
+      "authorizedForDiary": true
+    },
+    {
+      "id": "patient-1",
+      "name": "Paciente de Teste",
+      "email": "paciente@teste.com",
+      "phone": "(85) 98888-8888",
+      "role": "patient",
+      "createdAt": "2026-05-21T19:56:29.215Z",
+      "authorizedForDiary": true
+    }
+  ],
+  "passwords": {
+    "admin-1": "$2b$12$cHWWFkd7LisXApP9tC747udnz.20cgn6Ajk2ITROVr4OzlqZaQo.q",
+    "patient-1": "$2b$12$GnGyM9fGS2V3.QE1T8TCuOhVLIfamh7O90I0XsJXPE/ODigaQAl8m"
+  },
+  "diary": [
+    {
+      "id": "journal-1",
+      "userId": "patient-1",
+      "patientName": "Paciente de Teste",
+      "date": "2026-05-21",
+      "time": "10:30",
+      "mood": "Ansioso",
+      "text": "25eec8c17f1e9cfce32d518a:cb50938dd139951005ee0bb8346ab2fd:d27bf34445030003cf603637dd16d660b7160e928e43767a0d7f4412fee8fcf106de5846b0255800b3f7aa862abc7f3283ad77030fcbd2deb88066fa9be2326b953e36f051c7da1e35e98cf9c6381daedc22d8cfd493c8082fa37da9aa3afff9480a54194f827605361ada39d3cfb1ab43c1cf339015845b020a38a3d5a1bb58ef7679cb2b66240e74a0195d1384dd19fd6958423e81d797a352c4d09fbd575bf5536dab2b900bf0995ae2d780bc061120ba2d016ec27d0c57d442ef8ffaacc0272e618bc1dd4bb1498445b71fd4e607b804"
+    }
+  ],
+  "appointments": [],
+  "availabilities": [
+    {
+      "date": "2026-05-22",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-23",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-25",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-26",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-27",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-28",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-29",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-05-30",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-06-01",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-06-02",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-06-03",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    },
+    {
+      "date": "2026-06-04",
+      "slots": [
+        "08:00",
+        "09:00",
+        "10:00",
+        "11:00",
+        "14:00",
+        "15:00",
+        "16:00",
+        "17:00"
+      ]
+    }
+  ],
+  "reflections": [
+    {
+      "id": "ref-1",
+      "title": "O Respiro no Caos",
+      "text": "Em momentos de estresse, tendemos a respirar de forma superficial, sinalizando perigo para o corpo. Dedique os próximos minutos para expandir seu pulmão de forma consciente. Sinta o ar entrando e saindo. Você está no controle do agora.",
+      "instruction": "Prática: Faça 5 respirações lentas e profundas. Inspire em 4 segundos, segure por 4 e expire lentamente em 6 segundos.",
+      "category": "Mindfulness",
+      "imageUrl": "https://images.unsplash.com/photo-1518241353330-0f7941c2d9b5?auto=format&fit=crop&w=600&q=80"
+    },
+    {
+      "id": "ref-2",
+      "title": "Acolhendo suas Emoções",
+      "text": "Toda emoção tem uma função. Em vez de resistir à tristeza ou ansiedade, trate-as como visitas temporárias que trazem uma mensagem. Resistir apenas prolonga o sofrimento; acolher abre espaço para a regulação.",
+      "instruction": "Prática: Escreva no diário o nome da emoção que você sente agora e onde você a percebe fisicamente (ex: nó na garganta, peso nos ombros).",
+      "category": "Autoaceitação",
+      "imageUrl": "https://images.unsplash.com/photo-1515003197213-e4cd08592c6c?auto=format&fit=crop&w=600&q=80"
+    },
+    {
+      "id": "ref-3",
+      "title": "O Poder dos Micro-Passos",
+      "text": "Mudanças profundas não acontecem do dia para a noite. Elas são a soma de pequenas escolhas diárias consistentes. Se a montanha parece alta demais para escalar hoje, o que você consegue fazer em apenas 5 minutos?",
+      "instruction": "Prática: Escolha uma tarefa pendente que está te gerando ansiedade e dedique exatamente 5 minutos focados nela agora.",
+      "category": "Resiliência",
+      "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80"
+    },
+    {
+      "id": "ref-4",
+      "title": "Praticando a Autocompaixão",
+      "text": "Como você falaria com um amigo de infância que estivesse passando por essa situação difícil? Certamente com gentileza e carinho. Por que, então, julgamos a nós mesmos com tanta dureza? Seja gentil consigo hoje.",
+      "instruction": "Prática: Olhe-se no espelho de forma suave ou abrace a si mesmo e repita: 'Eu fiz o melhor que pude, e tudo bem.'",
+      "category": "Autocompaixão",
+      "imageUrl": "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=600&q=80"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "notif-1779393389888-seed",
+      "timestamp": "2026-05-21T19:56:29.888Z",
+      "type": "system",
+      "recipient": "Elieyd Barreto",
+      "message": "Sistema inicializado com sucesso. Contas de Elieyd e Paciente de Teste pré-cadastradas para validação rápida."
+    }
+  ],
+  "auditLogs": [],
+  "educationalContents": [
+    {
+      "id": "edu-1",
+      "title": "Entendendo a Ansiedade: Guia do Ministério da Saúde",
+      "category": "Ansiedade",
+      "type": "article",
+      "duration": "5 min",
+      "summary": "Uma explicação oficial e neurocientífica de como a ansiedade atua no nosso corpo, suas causas, sintomas corporais e tratamentos.",
+      "url": "https://www.gov.br/saude/pt-br/assuntos/saude-de-a-z/a/ansiedade",
+      "createdAt": "2026-05-21T19:56:28.508Z"
+    },
+    {
+      "id": "edu-2",
+      "title": "Mindfulness para Iniciantes: Guia de Exercícios e Prática",
+      "category": "Mindfulness",
+      "type": "podcast",
+      "duration": "10 min",
+      "summary": "Aprenda a acalmar a mente e focar no momento presente com este guia de exercícios práticos validados do portal UOL VivaBem.",
+      "url": "https://www.uol.com.br/vivabem/faq/mindfulness-o-que-e-para-que-serve-e-exercicios-para-iniciantes.htm",
+      "createdAt": "2026-05-21T19:56:28.512Z"
+    },
+    {
+      "id": "edu-3",
+      "title": "Higiene do Sono: Como Dormir Melhor Naturalmente",
+      "category": "Sono",
+      "type": "video",
+      "duration": "12 min",
+      "summary": "Orientações oficiais do Ministério da Saúde do Brasil para reestruturar seus hábitos, ambiente e alimentação antes de dormir.",
+      "url": "https://bvsms.saude.gov.br/higiene-do-sono/",
+      "createdAt": "2026-05-21T19:56:28.512Z"
+    }
+  ],
+  "emailTemplates": [
+    {
+      "id": "tpl-welcome",
+      "name": "welcome",
+      "subject": "Seja muito bem-vindo(a) ao Consultório de Psicoterapia!",
+      "body": "<h2>Olá, {{patient_name}}!</h2>\n<p>Seu perfil foi cadastrado com sucesso no consultório da <strong>Dra. Elieyd Barreto</strong>.</p>\n<p>Dicas para a sua primeira teleconsulta:</p>\n<ul>\n  <li>Prepare um ambiente privado, silencioso e confortável.</li>\n  <li>Use fones de ouvido para garantir seu sigilo e melhor áudio.</li>\n  <li>Acesse o link do Google Meet alguns minutos antes.</li>\n</ul>\n<p>Sua saúde mental é nossa prioridade absoluta.</p>\n<p>Atenciosamente,<br/><strong>Dra. Elieyd Barreto</strong><br/>CRP 11/XXXXX</p>",
+      "updatedAt": "2026-05-21T19:56:28.512Z"
+    },
+    {
+      "id": "tpl-1st-reminder",
+      "name": "first_reminder",
+      "subject": "Nossa sessão se aproxima - Lembrete Importante",
+      "body": "<h2>Olá, {{patient_name}}!</h2>\n<p>Este é o primeiro lembrete de que sua consulta agendada está chegando.</p>\n<p><strong>Detalhes:</strong> {{appointment_date}} às {{appointment_time}} (Horário de Brasília).</p>\n<p><strong>Link da Teleconsulta:</strong> <a href=\"{{meet_link}}\">{{meet_link}}</a></p>\n<p><em>Parágrafo de acolhimento ético:</em> Lembro que todo o nosso atendimento está estritamente protegido pelo <strong>Código de Ética Profissional do Psicólogo</strong>, garantindo sigilo absoluto. Este é um espaço seguro e livre de julgamentos, focado no seu bem-estar e no desenvolvimento da sua saúde mental.</p>\n<p>Atenciosamente,<br/><strong>Dra. Elieyd Barreto</strong><br/>CRP 11/XXXXX</p>",
+      "updatedAt": "2026-05-21T19:56:28.512Z"
+    },
+    {
+      "id": "tpl-2nd-reminder",
+      "name": "second_reminder",
+      "subject": "Sua consulta inicia em breve",
+      "body": "<h2>Olá, {{patient_name}}, falta muito pouco!</h2>\n<p>Nossa consulta começa em breve.</p>\n<p><strong>Link de Acesso Direto:</strong> <a href=\"{{meet_link}}\">{{meet_link}}</a></p>\n<p><strong>Observação de Sintonização complementar:</strong></p>\n<blockquote style=\"background: #FAF8F6; border-left: 4px solid #D9B8A7; padding: 10px; margin: 10px 0;\">\n  {{theoretical_note}}\n</blockquote>\n<p>Prepare sua água, sente-se confortavelmente e respire fundo. Estou te aguardando!</p>\n<p>Atenciosamente,<br/><strong>Dra. Elieyd Barreto</strong></p>",
+      "updatedAt": "2026-05-21T19:56:28.512Z"
+    }
+  ]
+}

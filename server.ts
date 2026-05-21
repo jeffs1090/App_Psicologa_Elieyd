@@ -187,32 +187,32 @@ const DEFAULT_REFLECTIONS: ReflectiveMessage[] = [
 const DEFAULT_EDUCATIONAL_CONTENT: EducationalContent[] = [
   {
     id: "edu-1",
-    title: "Entendendo a Ansiedade: Amiga ou Inimiga?",
+    title: "Entendendo a Ansiedade: Guia do Ministério da Saúde",
     category: "Ansiedade",
     type: "article",
     duration: "5 min",
-    summary: "Uma explicação clara e neurocientífica de como a ansiedade atua no nosso corpo sob a ótica da Terapia Cognitivo-Comportamental.",
-    url: "https://www.psico.org.br/artigos/ansiedade-tcc",
+    summary: "Uma explicação oficial e neurocientífica de como a ansiedade atua no nosso corpo, suas causas, sintomas corporais e tratamentos.",
+    url: "https://www.gov.br/saude/pt-br/assuntos/saude-de-a-z/a/ansiedade",
     createdAt: new Date().toISOString()
   },
   {
     id: "edu-2",
-    title: "Prática de Mindfulness para Iniciantes (Áudio Guiado)",
+    title: "Mindfulness para Iniciantes: Guia de Exercícios e Prática",
     category: "Mindfulness",
     type: "podcast",
     duration: "10 min",
-    summary: "Aprenda a focar no momento presente com este exercício simples de atenção plena focado na respiração.",
-    url: "https://www.psico.org.br/artigos/mindfulness-audio",
+    summary: "Aprenda a acalmar a mente e focar no momento presente com este guia de exercícios práticos validados do portal UOL VivaBem.",
+    url: "https://www.uol.com.br/vivabem/faq/mindfulness-o-que-e-para-que-serve-e-exercicios-para-iniciantes.htm",
     createdAt: new Date().toISOString()
   },
   {
     id: "edu-3",
-    title: "Higiene do Sono: Como Dormir Melhor",
+    title: "Higiene do Sono: Como Dormir Melhor Naturalmente",
     category: "Sono",
     type: "video",
     duration: "12 min",
-    summary: "Dicas práticas baseadas em psicologia para reestruturar seu ambiente e seus hábitos antes de dormir.",
-    url: "https://www.psico.org.br/artigos/higiene-sono",
+    summary: "Orientações oficiais do Ministério da Saúde do Brasil para reestruturar seus hábitos, ambiente e alimentação antes de dormir.",
+    url: "https://bvsms.saude.gov.br/higiene-do-sono/",
     createdAt: new Date().toISOString()
   }
 ];
@@ -548,6 +548,173 @@ async function triggerEmailNotification(toEmail: string, subject: string, htmlCo
     console.log(`Assunto: ${subject}`);
     console.log(`Mensagem: ${htmlContent.substring(0, 200)}...`);
   }
+}
+
+function generateStaticPix(key: string, amount: number, name: string, city: string, txid: string = "***"): string {
+  let cleanedKey = key.trim();
+  if (cleanedKey.includes("@")) {
+    // Email - keep as is
+  } else if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(cleanedKey)) {
+    // Random Key UUID - keep as is
+  } else {
+    const digits = cleanedKey.replace(/\D/g, "");
+    if (digits.length === 11 && (cleanedKey.includes(".") || cleanedKey.includes("-"))) {
+      cleanedKey = digits;
+    } else if (digits.length === 14 && (cleanedKey.includes(".") || cleanedKey.includes("/") || cleanedKey.includes("-"))) {
+      cleanedKey = digits;
+    } else if (digits.length >= 10 && digits.length <= 11) {
+      cleanedKey = `+55${digits}`;
+    } else {
+      cleanedKey = digits || cleanedKey;
+    }
+  }
+
+  const cleanString = (str: string, maxLength: number) => {
+    return str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9\s]/g, "")
+      .toUpperCase()
+      .substring(0, maxLength)
+      .trim();
+  };
+
+  const cleanName = cleanString(name || "Dra Elieyd Barreto", 25);
+  const cleanCity = cleanString(city || "Sao Paulo", 15);
+
+  const pad = (num: number) => String(num).padStart(2, "0");
+
+  const tag00 = "000201";
+  const tag01 = "010212";
+
+  const gui = "0014br.gov.bcb.pix";
+  const subkey = `01${pad(cleanedKey.length)}${cleanedKey}`;
+  const tag26Content = gui + subkey;
+  const tag26 = `26${pad(tag26Content.length)}${tag26Content}`;
+
+  const tag52 = "52040000";
+  const tag53 = "5303986";
+
+  const formattedAmount = Number(amount).toFixed(2);
+  const tag54 = `54${pad(formattedAmount.length)}${formattedAmount}`;
+
+  const tag58 = "5802BR";
+  const tag59 = `59${pad(cleanName.length)}${cleanName}`;
+  const tag60 = `60${pad(cleanCity.length)}${cleanCity}`;
+
+  const cleanTxid = cleanString(txid || "***", 25) || "***";
+  const subtxid = `05${pad(cleanTxid.length)}${cleanTxid}`;
+  const tag62 = `62${pad(subtxid.length)}${subtxid}`;
+
+  const payloadWithoutCRC = tag00 + tag01 + tag26 + tag52 + tag53 + tag54 + tag58 + tag59 + tag60 + tag62 + "6304";
+  const crc = crc16ccitt(payloadWithoutCRC);
+  
+  return payloadWithoutCRC + crc;
+}
+
+function crc16ccitt(str: string): string {
+  let crc = 0xFFFF;
+  const polynomial = 0x1021;
+
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    crc ^= (code << 8);
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ polynomial) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+
+  return crc.toString(16).toUpperCase().padStart(4, "0");
+}
+
+async function sendBillingEmailHelper(apptId: string): Promise<{ success: boolean; message: string; value: number }> {
+  const appt = db.appointments.find(a => a.id === apptId);
+  if (!appt) {
+    throw new Error("Agendamento não localizado para cobrança.");
+  }
+
+  const patient = db.users.find(u => u.id === appt.userId);
+  const sessionValue = patient && patient.sessionPrice !== undefined ? patient.sessionPrice : 150;
+
+  const pixKey = getConfigValue("PIX_KEY") || "014.225.889-00";
+  const pixName = getConfigValue("PIX_BENEFICIARY_NAME") || "Elieyd Barreto";
+  const pixCity = getConfigValue("PIX_CITY") || "Sao Paulo";
+
+  const rawTxid = `REC${appt.id.replace(/\W/g, "").toUpperCase()}`;
+  const txid = rawTxid.substring(0, 25);
+  
+  const pixPayload = generateStaticPix(pixKey, sessionValue, pixName, pixCity, txid);
+
+  const appUrl = process.env.APP_URL || getConfigValue("APP_URL") || "http://localhost:3000";
+  const checkoutUrl = `${appUrl}/?pay=${appt.id}`;
+
+  const subject = `Cobrança Digital: Sessão de Psicoterapia - Dra. Elieyd Barreto`;
+  const formattedDate = new Date(appt.date + "T00:00:00").toLocaleDateString('pt-BR');
+  
+  const mailContent = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 16px rgba(47,71,56,0.08);">
+      <div style="background-color: #2F4738; padding: 32px 24px; text-align: center; color: white;">
+        <h2 style="margin: 0; font-family: sans-serif; font-size: 22px; font-weight: bold; letter-spacing: -0.5px;">Dra. Elieyd Barreto</h2>
+        <p style="margin: 6px 0 0 0; font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">Psicoterapia & Formulações Clínicas Avançadas</p>
+      </div>
+      <div style="padding: 32px 28px; color: #334155; font-size: 14.5px; line-height: 1.6; background-color: #ffffff;">
+        <p>Olá, <strong>${appt.patientName}</strong>,</p>
+        <p>Espero que este contato lhe encontre bem.</p>
+        <p>Seguem detalhados os dados para emissão e quitação de honorários clínicos referentes ao seu último atendimento psicoterápico:</p>
+        
+        <div style="background-color: #FAF8F6; border-radius: 16px; border: 1px solid #E9D2C4; padding: 20px; margin: 24px 0; text-align: center;">
+          <span style="font-size: 10px; color: #556B5D; text-transform: uppercase; font-weight: bold; letter-spacing: 1.2px;">Consulta Clínico-Terapêutica</span>
+          <h3 style="margin: 8px 0; font-size: 28px; color: #2F4738; font-weight: bold;">R$ ${Number(sessionValue).toFixed(2)}</h3>
+          <p style="margin: 0; font-size: 12.5px; color: #64748b; font-family: monospace;">📅 Realizada em: ${formattedDate} às ${appt.time}h</p>
+        </div>
+
+        <div style="margin: 28px 0; text-align: center;">
+          <p style="font-weight: bold; color: #2F4738; font-size: 13.5px; margin-bottom: 12px; text-transform: uppercase; font-family: monospace; tracking-wide">Opção 1: Escanear Pix QR Code</p>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=2e4738&data=${encodeURIComponent(pixPayload)}" alt="Pix QR Code" style="border: 4px solid #FAF8F6; border-radius: 16px; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.02);" />
+          
+          <div style="margin-top: 16px; text-align: left;">
+            <p style="font-size: 11px; color: #556B5D; margin-bottom: 4px; font-family: sans-serif;">Chave Pix: <strong>${pixKey}</strong> • Beneficiário: <strong>${pixName}</strong></p>
+            <label style="font-size: 11px; font-weight: bold; color: #556B5D; font-family: monospace; display: block; margin-bottom: 6px;">Código Copia e Cola:</label>
+            <textarea readonly style="width: 100%; height: 60px; font-family: monospace; font-size: 10px; border: 1px solid #e2e8f5; border-radius: 10px; padding: 8px; background-color: #f8fafc; resize: none; text-align: left; outline: none; box-sizing: border-box; color: #334155;">${pixPayload}</textarea>
+          </div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;" />
+
+        <div style="text-align: center; margin: 24px 0;">
+          <p style="font-weight: bold; color: #2F4738; font-size: 13.5px; margin-bottom: 4px;">Opção 2: Cartão de Crédito</p>
+          <p style="font-size: 12.5px; color: #64748b; margin-top: 0; margin-bottom: 16px;">Para efetuar o pagamento via cartão de crédito em ambiente blindado ou emitir recibo oficial, utilize nosso link:</p>
+          <a href="${checkoutUrl}" target="_blank" style="background-color: #2F4738; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 30px; font-weight: bold; font-family: sans-serif; font-size: 13.5px; display: inline-block; box-shadow: 0 4px 12px rgba(47,71,56,0.2); transition: all 0.2s;">💳 Pagar da Forma que Preferir</a>
+        </div>
+
+        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 36px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+          Esta cobrança é direcionada eletronicamente. Suas informações são protegidas sob a Lei Geral de Proteção de Dados (LGPD).<br/>
+          <strong>Dra. Elieyd Barreto</strong> • CRP 11/XXXXX • Psicóloga Clínico-Jurídica
+        </p>
+      </div>
+    </div>
+  `;
+
+  await triggerEmailNotification(appt.patientEmail, subject, mailContent);
+
+  if (!appt.notes || !appt.notes.includes("Cobrança emitida")) {
+    appt.notes = appt.notes ? appt.notes + " (Cobrança emitida por e-mail)" : "Cobrança de sessão transmitida ao e-mail.";
+  }
+  (appt as any).paymentSentAt = new Date().toISOString();
+  (appt as any).paymentSentValue = sessionValue;
+  (appt as any).paymentLinkSent = true;
+  if ((appt as any).paymentStatus !== "pago") {
+    (appt as any).paymentStatus = "pendente";
+  }
+
+  saveDatabase(db);
+  addAuditLog("admin@elieyd.com.br", "EMITIR_COBRANCA_EMAIL", appt.userId, `Envio de e-mail de cobrança de R$ ${sessionValue} referente ao atendimento de ${appt.date}`);
+
+  return { success: true, message: "Aviso de cobrança gerado e encaminhado com sucesso por e-mail!", value: sessionValue };
 }
 
 // --- GOOGLE CALENDAR & TESTING UTILITIES ---
@@ -1136,6 +1303,25 @@ O retorno deve ser estritamente formatado em JSON válido em português do Brasi
   };
 
   user.sessionNotes.push(newNote);
+
+  // Hook de Finalização Automática de Sessão via Evolução Clínica
+  const noteTargetDate = date || getTodayString();
+  const matchedAppt = db.appointments.find((a) => 
+    a.userId === id && 
+    a.date === noteTargetDate && 
+    (a.status === "confirmed" || a.status === "rescheduled" || a.status === "pending")
+  );
+
+  if (matchedAppt) {
+    matchedAppt.status = "completed";
+    await syncAppointmentToGoogleCalendar(matchedAppt, matchedAppt.googleEventId ? "update" : "insert");
+    try {
+      await sendBillingEmailHelper(matchedAppt.id);
+    } catch (billingErr) {
+      console.error("Falha ao disparar cobrança automática no registro de evolução clínica:", billingErr);
+    }
+  }
+
   saveDatabase(db);
 
   res.status(201).json({
@@ -1247,10 +1433,22 @@ app.get("/api/appointments/:id", (req, res) => {
   // Find associated patient to retrieve their custom session price
   const patient = db.users.find((u) => u.id === appt.userId);
   const sessionPrice = patient && patient.sessionPrice !== undefined ? patient.sessionPrice : 150;
+
+  // Retrieve custom Pix configurations
+  const pixKey = getConfigValue("PIX_KEY") || "014.225.889-00";
+  const pixName = getConfigValue("PIX_BENEFICIARY_NAME") || "Elieyd Barreto";
+  const pixCity = getConfigValue("PIX_CITY") || "Sao Paulo";
+
+  // Generate dynamic Pix copy-paste payload
+  const rawTxid = `REC${appt.id.replace(/\W/g, "").toUpperCase()}`;
+  const txid = rawTxid.substring(0, 25);
+  const pixPayload = generateStaticPix(pixKey, sessionPrice, pixName, pixCity, txid);
   
   res.json({
     ...appt,
     sessionPrice,
+    pixKey,
+    pixPayload,
     paymentStatus: (appt as any).paymentStatus || "pendente",
     paymentDate: (appt as any).paymentDate || null,
     paymentMethod: (appt as any).paymentMethod || null,
@@ -1453,6 +1651,14 @@ app.post("/api/appointments/:id/status", async (req, res) => {
 
   if (patientMsg) {
     await triggerEmailNotification(appt.patientEmail, subject, patientMsg);
+  }
+
+  if (status === "completed") {
+    try {
+      await sendBillingEmailHelper(appt.id);
+    } catch (billingErr) {
+      console.error("Falha ao disparar cobrança automática no encerramento da sessão:", billingErr);
+    }
   }
 
   res.json({ message: "Status de consulta atualizado com sucesso.", appointment: appt });
@@ -1773,7 +1979,10 @@ app.get("/api/admin/config", (req, res) => {
     reminder_minutes: config.reminder_minutes || "30",
     reminder_additional_msg: config.reminder_additional_msg || "",
     reminder_qty: config.reminder_qty || "1",
-    reminder_compulsory_msg: config.reminder_compulsory_msg || ""
+    reminder_compulsory_msg: config.reminder_compulsory_msg || "",
+    PIX_KEY: config.PIX_KEY || "014.225.889-00",
+    PIX_BENEFICIARY_NAME: config.PIX_BENEFICIARY_NAME || "Elieyd Barreto",
+    PIX_CITY: config.PIX_CITY || "Sao Paulo"
   };
   res.json(maskedConfig);
 });
@@ -1783,7 +1992,8 @@ app.post("/api/admin/config", (req, res) => {
     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM,
     TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, GEMINI_API_KEY,
     GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALENDAR_ID,
-    reminder_minutes, reminder_additional_msg, reminder_qty, reminder_compulsory_msg
+    reminder_minutes, reminder_additional_msg, reminder_qty, reminder_compulsory_msg,
+    PIX_KEY, PIX_BENEFICIARY_NAME, PIX_CITY
   } = req.body;
 
   if (!db.config) db.config = {};
@@ -1810,6 +2020,9 @@ app.post("/api/admin/config", (req, res) => {
   updateField("reminder_additional_msg", reminder_additional_msg);
   updateField("reminder_qty", reminder_qty);
   updateField("reminder_compulsory_msg", reminder_compulsory_msg);
+  updateField("PIX_KEY", PIX_KEY);
+  updateField("PIX_BENEFICIARY_NAME", PIX_BENEFICIARY_NAME);
+  updateField("PIX_CITY", PIX_CITY);
 
   saveDatabase(db);
   res.json({ message: "Configurações atualizadas com sucesso!" });
@@ -2173,80 +2386,12 @@ app.post("/api/appointments/:id/receipt", (req, res) => {
 
 app.post("/api/appointments/:id/send-billing-email", async (req, res) => {
   const { id } = req.params;
-  const appt = db.appointments.find(a => a.id === id);
-  if (!appt) {
-    return res.status(404).json({ error: "Agendamento não localizado para cobrança." });
+  try {
+    const result = await sendBillingEmailHelper(id);
+    res.json({ success: true, message: result.message });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Falha ao encaminhar cobrança." });
   }
-
-  const patient = db.users.find(u => u.id === appt.userId);
-  const sessionValue = patient && patient.sessionPrice !== undefined ? patient.sessionPrice : 150;
-
-  // Generate dynamic Pix copy-paste payload
-  const pixPayload = `00020101021226850014br.gov.bcb.pix2563pix.elieyd.com.br/atendimento/rec-${appt.id}5204000053039865407${Number(sessionValue).toFixed(2)}5802BR5915Elieyd Barreto6009Sao Paulo62070503***6304FC3C`;
-
-  // Application URL
-  const appUrl = process.env.APP_URL || getConfigValue("APP_URL") || "http://localhost:3000";
-  const checkoutUrl = `${appUrl}/?pay=${appt.id}`;
-
-  const subject = `Cobrança Digital: Sessão de Psicoterapia - Dra. Elieyd Barreto`;
-  const mailContent = `
-    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e1e8f0; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 16px rgba(47,71,56,0.08);">
-      <div style="background-color: #2F4738; padding: 32px 24px; text-align: center; color: white;">
-        <h2 style="margin: 0; font-family: sans-serif; font-size: 22px; font-weight: bold; letter-spacing: -0.5px;">Dra. Elieyd Barreto</h2>
-        <p style="margin: 6px 0 0 0; font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 500;">Psicoterapia & Formulações Clínicas Avançadas</p>
-      </div>
-      <div style="padding: 32px 28px; color: #334155; font-size: 14.5px; line-height: 1.6; background-color: #ffffff;">
-        <p>Olá, <strong>${appt.patientName}</strong>,</p>
-        <p>Espero que este contato lhe encontre bem.</p>
-        <p>Seguem detalhados os dados para emissão e quitação de honorários clínicos referentes ao seu último atendimento psicoterápico:</p>
-        
-        <div style="background-color: #FAF8F6; border-radius: 16px; border: 1px solid #E9D2C4; padding: 20px; margin: 24px 0; text-align: center;">
-          <span style="font-size: 10px; color: #556B5D; text-transform: uppercase; font-weight: bold; letter-spacing: 1.2px;">Consulta Clínico-Terapêutica</span>
-          <h3 style="margin: 8px 0; font-size: 28px; color: #2F4738; font-weight: bold;">R$ ${Number(sessionValue).toFixed(2)}</h3>
-          <p style="margin: 0; font-size: 12.5px; color: #64748b; font-family: monospace;">📅 Realizada em: ${new Date(appt.date + "T00:00:00").toLocaleDateString('pt-BR')} às ${appt.time}h</p>
-        </div>
-
-        <div style="margin: 28px 0; text-align: center;">
-          <p style="font-weight: bold; color: #2F4738; font-size: 13.5px; margin-bottom: 12px; text-transform: uppercase; font-family: monospace; tracking-wide">Opção 1: Escanear Pix QR Code</p>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=2e4738&data=${encodeURIComponent(pixPayload)}" alt="Pix QR Code" style="border: 4px solid #FAF8F6; border-radius: 16px; display: inline-block; box-shadow: 0 4px 8px rgba(0,0,0,0.02);" />
-          
-          <div style="margin-top: 16px; text-align: left;">
-            <label style="font-size: 11px; font-weight: bold; color: #556B5D; font-family: monospace; display: block; margin-bottom: 6px;">Código Copia e Cola:</label>
-            <textarea readonly style="width: 100%; height: 60px; font-family: monospace; font-size: 10px; border: 1px solid #e2e8f5; border-radius: 10px; padding: 8px; background-color: #f8fafc; resize: none; text-align: left; outline: none; box-sizing: border-box; color: #334155;">${pixPayload}</textarea>
-          </div>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;" />
-
-        <div style="text-align: center; margin: 24px 0;">
-          <p style="font-weight: bold; color: #2F4738; font-size: 13.5px; margin-bottom: 4px;">Opção 2: Cartão de Crédito</p>
-          <p style="font-size: 12.5px; color: #64748b; margin-top: 0; margin-bottom: 16px;">Para efetuar o pagamento via cartão de crédito em ambiente blindado ou emitir recibo oficial, utilize nosso link:</p>
-          <a href="${checkoutUrl}" target="_blank" style="background-color: #2F4738; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 30px; font-weight: bold; font-family: sans-serif; font-size: 13.5px; display: inline-block; box-shadow: 0 4px 12px rgba(47,71,56,0.2); transition: all 0.2s;">💳 Pagar da Forma que Preferir</a>
-        </div>
-
-        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 36px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
-          Esta cobrança é direcionada eletronicamente. Suas informações são protegidas sob a Lei Geral de Proteção de Dados (LGPD).<br/>
-          <strong>Dra. Elieyd Barreto</strong> • CRP 11/XXXXX • Psicóloga Clínico-Jurídica
-        </p>
-      </div>
-    </div>
-  `;
-
-  await triggerEmailNotification(appt.patientEmail, subject, mailContent);
-
-  // Record details on appointment
-  appt.notes = appt.notes ? appt.notes + " (Cobrança emitida por e-mail)" : "Cobrança de sessão transmitida ao e-mail.";
-  (appt as any).paymentSentAt = new Date().toISOString();
-  (appt as any).paymentSentValue = sessionValue;
-  (appt as any).paymentLinkSent = true;
-  if ((appt as any).paymentStatus !== "pago") {
-    (appt as any).paymentStatus = "pendente";
-  }
-
-  saveDatabase(db);
-  addAuditLog("admin@elieyd.com.br", "EMITIR_COBRANCA_EMAIL", appt.userId, `Envio de e-mail de cobrança de R$ ${sessionValue} referente ao atendimento de ${appt.date}`);
-
-  res.json({ success: true, message: "Aviso de cobrança gerado e encaminhado com sucesso por e-mail!" });
 });
 
 app.post("/api/appointments/:id/confirm-payment", (req, res) => {
