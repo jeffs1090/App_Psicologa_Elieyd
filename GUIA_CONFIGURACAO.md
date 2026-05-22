@@ -63,3 +63,42 @@ A URL principal gerada automaticamente onde sua aplicação está rodando. O ser
 
 ### `GEMINI_API_KEY`
 A chave de validação oficial do Google AI Studio, injetada dinamicamente, permitindo que a Inteligência Artificial formule mensagens reflexivas autorais e práticas baseadas na sua linha psicológica e no humor indicado pelo paciente.
+
+---
+
+## 4. Guia de Publicação e Hospedagem Externa (Full-Stack)
+
+Nossa aplicação é **Full-Stack** (composta por um cliente em Frontend React e um servidor Backend Express em Node.js). Ela **não** pode ser hospedada apenas como um site de arquivos estáticos (como GitHub Pages clássico) sem que o servidor também esteja rodando, pois o servidor é responsável por armazenar os dados em `database.json`, enviar os Pix, enviar os e-mails e lidar com a autenticação.
+
+Existem duas formas principais de você hospedar esta aplicação externamente com sucesso:
+
+### Opção A: Hospedagem Unificada (Altamente Recomendado)
+Neste modelo, o seu servidor backend e o frontend rodam juntos na mesma máquina/serviço. Plataformas excelentes para isso são: **Render.com**, **Railway.app**, **Fly.io** ou **Heroku**.
+1. **Como Funciona:** Você sobe todo o repositório fonte para estes serviços.
+2. **Build & Start:** A plataforma lerá o arquivo `package.json` e executará automaticamente:
+   * **Script de Build:** `npm run build` (compila o frontend e agrupa o servidor no arquivo compactado `dist/server.cjs`).
+   * **Script de Start:** `npm run start` (executa `node dist/server.cjs` iniciando o servidor).
+3. **Porta Dinâmica:** O servidor foi atualizado para ler dinamicamente a porta dada pela hospedagem (`process.env.PORT`), garantindo que a comunicação não apresente erros.
+4. **Sem configurações extras de rede:** Como o frontend e o backend rodam na mesma URL, as chamadas com caminhos relativos (ex: `/api/auth/login`) funcionam perfeitamente de primeira!
+
+### Opção B: Hospedagem Separada (Frontend no Vercel/Netlify + Backend no Render/Railway)
+Caso você queira hospedar a interface visual em plataformas estáticas otimizadas (como **Vercel** ou **Netlify**) e o servidor de processamento e dados em outra (como **Render** ou **Railway**):
+1. No painel da hospedagem do **Frontend** (Vercel/Netlify), configure a seguinte variável de ambiente:
+   * `VITE_API_URL` = link completo da URL de onde o seu servidor backend foi publicado (ex: `https://meu-consultorio-api.onrender.com`).
+2. No painel de hospedagem do **Backend** (Render/Railway), assegure-se de subir o projeto normalmente com o comando de build e start padrões.
+3. **CORS Ativo:** O nosso servidor Express já vem equipado com uma política robusta de CORS integrada nativamente que aceitará conexões vindas do seu domínio do Vercel/Netlify garantindo o funcionamento suave.
+
+---
+
+## 5. Credenciais de Teste / Acesso Padrão (Pré-cadastrados no `database.json`)
+
+Para validar as principais funções instantaneamente, utilize os seguintes dados de demonstração:
+
+* **Conta Administrativa (Dra. Elieyd Barreto):**
+  * **E-mail:** `admin@elieyd.com.br`
+  * **Senha:** `elieyd123`
+  
+* **Conta de Paciente Simulado (Paciente de Teste):**
+  * **E-mail:** `paciente@teste.com`
+  * **Senha:** `senha123`
+

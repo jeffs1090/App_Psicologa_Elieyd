@@ -125,6 +125,25 @@ function getDurationText(createdAtStr: string): string {
   return `${months} meses`;
 }
 
+const originalFetch = window.fetch;
+const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  let url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
+  if (url && url.startsWith("/api/")) {
+    const apiBase = (import.meta.env.VITE_API_URL as string) || "";
+    if (apiBase) {
+      const cleanBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+      url = `${cleanBase}${url}`;
+    }
+  }
+  
+  if (typeof input === "string" || input instanceof URL) {
+    return originalFetch(url, init);
+  } else {
+    const newRequest = new Request(url, input);
+    return originalFetch(newRequest, init);
+  }
+};
+
 export default function App() {
   // Auth state
   const [currentUser, setCurrentUser] = useState<User | null>(null);
