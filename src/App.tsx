@@ -194,6 +194,11 @@ export default function App() {
   const [triggeringReminders, setTriggeringReminders] = useState(false);
   const [isAdminViewingAsPatient, setIsAdminViewingAsPatient] = useState(false);
 
+  // Custom Pix Configuration States
+  const [pixKey, setPixKey] = useState("");
+  const [pixBeneficiaryName, setPixBeneficiaryName] = useState("");
+  const [pixCity, setPixCity] = useState("");
+
   // States for Educational Material and Email Templates
   const [eduTitle, setEduTitle] = useState("");
   const [eduCategory, setEduCategory] = useState("Ansiedade");
@@ -424,6 +429,9 @@ export default function App() {
         setReminderAdditionalMsg(config.reminder_additional_msg || "");
         setReminderQty(config.reminder_qty || "1");
         setReminderCompulsoryMsg(config.reminder_compulsory_msg || "");
+        setPixKey(config.PIX_KEY || "");
+        setPixBeneficiaryName(config.PIX_BENEFICIARY_NAME || "");
+        setPixCity(config.PIX_CITY || "");
       }
     } catch (err) {
       console.error("Erro ao carregar configurações administrador:", err);
@@ -1050,7 +1058,10 @@ export default function App() {
           reminder_minutes: reminderMinutes,
           reminder_additional_msg: reminderAdditionalMsg,
           reminder_qty: reminderQty,
-          reminder_compulsory_msg: reminderCompulsoryMsg
+          reminder_compulsory_msg: reminderCompulsoryMsg,
+          PIX_KEY: pixKey,
+          PIX_BENEFICIARY_NAME: pixBeneficiaryName,
+          PIX_CITY: pixCity
         })
       });
       if (response.ok) {
@@ -1414,14 +1425,14 @@ export default function App() {
                       <span className="p-1 px-2.5 bg-emerald-50 text-emerald-800 border border-emerald-150 rounded-full text-[9px] font-bold">
                         PIX INSTANTÂNEO
                       </span>
-                      <p className="text-[10.5px] text-zinc-505 font-mono">Chave Pix Ativa: <b>014.225.889-00</b> (Dra. Elieyd)</p>
+                      <p className="text-[10.5px] text-zinc-500 font-mono">Chave Pix Ativa: <b>{checkoutAppt.pixKey || "014.225.889-00"}</b> (Dra. Elieyd)</p>
                     </div>
 
                     <div className="flex flex-col items-center py-2 space-y-3">
                       {/* Generates standard dynamic QR code preview */}
                       <img
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=2e4738&data=${encodeURIComponent(
-                          `00020101021226850014br.gov.bcb.pix2563pix.elieyd.com.br/atendimento/rec-${checkoutAppt.id}5204000053039865407${Number(checkoutAppt.sessionPrice).toFixed(2)}5802BR5915Elieyd Barreto6009Sao Paulo62070503***6304FC3C`
+                          checkoutAppt.pixPayload || ""
                         )}`}
                         alt="Pix QR Code"
                         className="w-44 h-44 border-4 border-[#FAF8F6] rounded-2xl shadow-sm"
@@ -1434,9 +1445,9 @@ export default function App() {
                         </label>
                         <div className="flex gap-1">
                           <input
-                            readonly
+                            readOnly
                             type="text"
-                            value={`00020101021226850014br.gov.bcb.pix2563pix.elieyd.com.br/atendimento/rec-${checkoutAppt.id}5204000053039865407${Number(checkoutAppt.sessionPrice).toFixed(2)}5802BR5915Elieyd Barreto6009Sao Paulo62070503***6304FC3C`}
+                            value={checkoutAppt.pixPayload || ""}
                             className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-[9.5px] font-mono text-zinc-600 focus:outline-none"
                             onClick={(e) => {
                               (e.target as any).select();
@@ -1445,9 +1456,9 @@ export default function App() {
                           />
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText(`00020101021226850014br.gov.bcb.pix2563pix.elieyd.com.br/atendimento/rec-${checkoutAppt.id}5204000053039865407${Number(checkoutAppt.sessionPrice).toFixed(2)}5802BR5915Elieyd Barreto6009Sao Paulo62070503***6304FC3C`);
+                              navigator.clipboard.writeText(checkoutAppt.pixPayload || "");
                             }}
-                            className="p-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-500 cursor-pointer"
+                            className="p-2 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 rounded-xl text-zinc-505 cursor-pointer"
                             title="Copiar Código"
                           >
                             <Copy className="w-3.5 h-3.5" />
@@ -1992,16 +2003,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* AUDIT DEMO HELPER CREDENTIALS POP BANNER */}
-                  <div className="bg-[#FAF8F6] p-4 rounded-3xl border border-[#D9B8A7]/20 space-y-1.5 shadow-2xs mt-2 self-bottom">
-                    <span className="text-[9px] font-mono tracking-widest uppercase text-[#8A8A8A] block font-bold flex items-center gap-1">
-                      🔐 Modo de Teste / Autoria:
-                    </span>
-                    <p className="text-[10px] text-[#8A8A8A] leading-relaxed font-sans">
-                      • <b>Clínica Admin:</b> email <code className="bg-emerald-50 text-[#2F4738] px-1 rounded select-all font-mono">admin@elieyd.com.br</code> / senha <code className="bg-emerald-50 text-[#2F4738] px-1 rounded select-all font-mono">elieyd123</code><br/>
-                      • <b>Paciente Simulado:</b> email <code className="bg-amber-50 text-amber-800 px-1 rounded select-all font-mono">paciente@teste.com</code> / senha <code className="bg-amber-50 text-amber-800 px-1 rounded select-all font-mono">senha123</code>
-                    </p>
-                  </div>
+
                 </div>
               )}
             </div>
@@ -3680,6 +3682,70 @@ export default function App() {
                           className="w-full text-xs p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-emerald-600 font-mono text-zinc-700 placeholder:text-zinc-300"
                         />
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Configuração de Recebimentos via Pix */}
+                  <div className="bg-white rounded-2xl p-5 border border-zinc-100 space-y-4 shadow-xs">
+                    <h4 className="text-xs font-bold text-slate-400 font-mono tracking-wider flex items-center justify-between border-b border-zinc-50 pb-2">
+                      <span className="flex items-center gap-1.5 text-zinc-750 font-semibold">
+                        <CreditCard className="w-4 h-4 text-emerald-600" />
+                        💸 Recebimentos via Pix (Cobrança Automática)
+                      </span>
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-sans border border-emerald-100 uppercase font-bold tracking-wider">Pix Dinâmico</span>
+                    </h4>
+
+                    <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100/60 space-y-2">
+                      <p className="text-xs font-semibold text-emerald-950 leading-tight">Configuração de Cobrança Pix</p>
+                      <p className="text-[11px] text-[#2F4738] leading-relaxed">
+                        Abaixo, configure os dados do seu Pix. As cobranças enviadas por e-mail no fechamento das sessões e a tela de checkout de sessões usarão estes dados para gerar o <b>código Pix "Copia e Cola"</b> e o <b>QR Code</b> dinamicamente com o valor correto de cada sessão.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-widest font-mono mb-1">Chave Pix (Celular, E-mail, CPF/CNPJ ou Chave Aleatória)</label>
+                        <input
+                          type="text"
+                          value={pixKey}
+                          onChange={(e) => setPixKey(e.target.value)}
+                          placeholder="Ex: +5585999999999 ou 12345678909"
+                          className="w-full text-xs p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-emerald-600 font-mono text-zinc-700"
+                        />
+                        <span className="text-[9px] text-zinc-400 block mt-1 font-sans">
+                          Dica: Para celulares, prefira o formato internacional (ex: +5585999999999). CPFs/CNPJs serão limpos de pontos e traços.
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-widest font-mono mb-1">Nome do Beneficiário (Até 25 caracteres)</label>
+                        <input
+                          type="text"
+                          value={pixBeneficiaryName}
+                          onChange={(e) => setPixBeneficiaryName(e.target.value)}
+                          placeholder="Ex: Dra. Elieyd Barreto"
+                          maxLength={25}
+                          className="w-full text-xs p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-emerald-600 font-sans text-zinc-700"
+                        />
+                        <span className="text-[9px] text-zinc-400 block mt-1 font-sans">
+                          Nome da conta bancária vinculada à chave Pix.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-widest font-mono mb-1">Cidade do Beneficiário (Até 15 caracteres)</label>
+                      <input
+                        type="text"
+                        value={pixCity}
+                        onChange={(e) => setPixCity(e.target.value)}
+                        placeholder="Ex: Fortaleza"
+                        maxLength={15}
+                        className="w-full text-xs p-2.5 bg-zinc-50 border border-zinc-200 rounded-xl focus:outline-none focus:border-emerald-600 font-sans text-zinc-700"
+                      />
+                      <span className="text-[9px] text-zinc-400 block mt-1 font-sans">
+                        Cidade do beneficiário cadastrada no banco.
+                      </span>
                     </div>
                   </div>
 
