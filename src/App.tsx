@@ -129,7 +129,7 @@ const originalFetch = window.fetch;
 const fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   let url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
   if (url && url.startsWith("/api/")) {
-    const apiBase = (import.meta.env.VITE_API_URL as string) || "";
+    const apiBase = ((import.meta as any).env.VITE_API_URL as string) || "";
     if (apiBase) {
       const cleanBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
       url = `${cleanBase}${url}`;
@@ -313,6 +313,210 @@ export default function App() {
     }
   };
 
+  // --- RECONECTAR AUTOMATICAMENTE, SENHA TEMPORÁRIA E RECUPERAÇÃO DE ACESSO ---
+
+  // Password Recovery States
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [recoveryStep, setRecoveryStep] = useState<"request" | "verify">("request");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
+  const [recoverySuccess, setRecoverySuccess] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+
+  // Temporary Password states for active patient login block
+  const [tempNewPassword, setTempNewPassword] = useState("");
+  const [tempConfirmPassword, setTempConfirmPassword] = useState("");
+  const [tempPassError, setTempPassError] = useState("");
+  const [tempPassLoading, setTempPassLoading] = useState(false);
+
+  // Forced Profile Update States for patient login block
+  const [forcedEmail, setForcedEmail] = useState("");
+  const [forcedPhone, setForcedPhone] = useState("");
+  const [profileUpdateError, setProfileUpdateError] = useState("");
+  const [profileUpdateLoading, setProfileUpdateLoading] = useState(false);
+
+  // Restoration on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("clinical_session_user");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object" && parsed.id) {
+          setCurrentUser(parsed);
+        }
+      } catch (err) {
+        console.error("Erro restaurando sessão:", err);
+        localStorage.removeItem("clinical_session_user");
+      }
+    }
+  }, []);
+
+  // Sync forced inputs when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setForcedEmail(currentUser.email || "");
+      setForcedPhone(currentUser.phone || "");
+    }
+  }, [currentUser]);
+
+  // Handler to request a 6-digit verification code
+  const handleRequestRecoveryCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setRecoverySuccess("");
+    if (!recoveryEmail) {
+      setAuthError("Favor preencher o campo e-mail.");
+      return;
+    }
+
+    setRecoveryLoading(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: recoveryEmail })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Injetamos uma nota amigável instruindo o código caso queiram testar sem o bot Telegram ativo
+        setRecoverySuccess(`${data.message} ${data.code ? `(Seu código temporário para testes rápidos é: ${data.code})` : ""}`);
+        setRecoveryStep("verify");
+      } else {
+        const err = await response.json();
+        setAuthError(err.error || "E-mail não localizado.");
+      }
+    } catch (err) {
+      setAuthError("Erro de comunicação com o servidor.");
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  // Handler for Password Recovery Execution using verification code
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setRecoverySuccess("");
+    if (!recoveryEmail || !recoveryCode || !recoveryNewPassword) {
+      setAuthError("Todos os campos obrigatórios do formulário devem ser definidos.");
+      return;
+    }
+
+    setRecoveryLoading(true);
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: recoveryEmail,
+          code: recoveryCode,
+          newPassword: recoveryNewPassword
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message);
+        setIsRecoveringPassword(false);
+        setRecoveryStep("request");
+        setAuthEmail(recoveryEmail); // Autoset user's e-mail as username in standard field
+        setRecoveryEmail("");
+        setRecoveryCode("");
+        setRecoveryNewPassword("");
+      } else {
+        const err = await response.json();
+        setAuthError(err.error || "Operação falhou.");
+      }
+    } catch (err) {
+      setAuthError("Erro de comunicação com o servidor.");
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
+  // Handler for Saving Temporary to Permanent Password
+  const handleSavePermanentPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTempPassError("");
+    if (!currentUser) return;
+    if (!tempNewPassword || !tempConfirmPassword) {
+      setTempPassError("Campos de nova senha são obrigatórios.");
+      return;
+    }
+    if (tempNewPassword !== tempConfirmPassword) {
+      setTempPassError("As senhas informadas não coincidem. Digite novamente.");
+      return;
+    }
+
+    setTempPassLoading(true);
+    try {
+      const response = await fetch("/api/auth/change-temp-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          newPassword: tempNewPassword
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentUser(data.user);
+        localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
+        setTempNewPassword("");
+        setTempConfirmPassword("");
+        alert("Sua senha permanente foi configurada com sucesso!");
+      } else {
+        const err = await response.json();
+        setTempPassError(err.error || "Falha ao definir senha.");
+      }
+    } catch (err) {
+      setTempPassError("Erro de comunicação.");
+    } finally {
+      setTempPassLoading(false);
+    }
+  };
+
+  // Handler for Saving Forced Profile Update Details
+  const handleSaveForcedProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileUpdateError("");
+    if (!currentUser) return;
+    if (!forcedEmail || !forcedPhone) {
+      setProfileUpdateError("Os campos de e-mail e celular são inteiramente obrigatórios.");
+      return;
+    }
+
+    setProfileUpdateLoading(true);
+    try {
+      const response = await fetch("/api/auth/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          email: forcedEmail,
+          phone: forcedPhone
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentUser(data.user);
+        localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
+        alert("Cadastro atualizado com sucesso!");
+      } else {
+        const err = await response.json();
+        setProfileUpdateError(err.error || "Falha ao atualizar.");
+      }
+    } catch (err) {
+      setProfileUpdateError("Erro de comunicação ao salvar.");
+    } finally {
+      setProfileUpdateLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (whatsappModalAppt) {
       setWhatsappMessageText(getWhatsAppTemplateMessage(whatsappTemplateType, whatsappModalAppt));
@@ -341,6 +545,9 @@ export default function App() {
   }, [checkoutApptId]);
 
   // Patient editor modal states
+  const [editPatientForceProfileUpdate, setEditPatientForceProfileUpdate] = useState(false);
+  const [generatedTempPassword, setGeneratedTempPassword] = useState("");
+  const [tempPasswordLoading, setTempPasswordLoading] = useState(false);
   const [editingPatient, setEditingPatient] = useState<User | null>(null);
   const [editPatientName, setEditPatientName] = useState("");
   const [editPatientPhone, setEditPatientPhone] = useState("");
@@ -529,6 +736,11 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         setCurrentUser(data.user);
+        if (rememberMe) {
+          localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
+        } else {
+          localStorage.removeItem("clinical_session_user");
+        }
         setAuthPassword("");
         setAuthEmail("");
       } else {
@@ -545,8 +757,14 @@ export default function App() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
-    if (!authName || !authEmail || !authPhone || !authPassword) {
-      setAuthError("Favor preencher todos os dados cadastrais.");
+    
+    // VALIDACÃO ADICIONAL OBRIGATÓRIA DA REQUISIÇÃO
+    if (!authEmail) {
+      setAuthError("O campo de e-mail é estritamente obrigatório para criar conta.");
+      return;
+    }
+    if (!authName || !authPhone || !authPassword) {
+      setAuthError("Favor preencher todos os dados cadastrais necessários.");
       return;
     }
 
@@ -566,6 +784,7 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         setCurrentUser(data.user);
+        localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
         setAuthPassword("");
         setAuthName("");
         setAuthPhone("");
@@ -631,6 +850,7 @@ export default function App() {
       
       if (event.data?.type === "GOOGLE_SIGNIN_SUCCESS") {
         setCurrentUser(event.data.user);
+        localStorage.setItem("clinical_session_user", JSON.stringify(event.data.user));
         setIsGoogleChooserOpen(false);
       } else if (event.data?.type === "GOOGLE_SIGNIN_NEW_USER") {
         setGoogleUser(event.data.googleUser);
@@ -658,6 +878,7 @@ export default function App() {
         if (data.exists) {
           // If user exists, log in instantly!
           setCurrentUser(data.user);
+          localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
           setIsGoogleChooserOpen(false);
         } else {
           // New user, trigger phone number completion step
@@ -700,6 +921,7 @@ export default function App() {
       if (response.ok) {
         const data = await response.json();
         setCurrentUser(data.user);
+        localStorage.setItem("clinical_session_user", JSON.stringify(data.user));
         // Clear Google details
         setGoogleUser(null);
         setGooglePhone("");
@@ -716,6 +938,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem("clinical_session_user");
     setCurrentUser(null);
     setDiaryEntries([]);
     setAppointments([]);
@@ -1230,6 +1453,8 @@ export default function App() {
     setEditPatientSessionPrice(pat.sessionPrice !== undefined ? pat.sessionPrice : 150);
     setEditPatientPaymentStatus(pat.paymentStatus || "em_dia");
     setEditPatientManualStatus(pat.manualStatus || "");
+    setEditPatientForceProfileUpdate(!!pat.forceProfileUpdate);
+    setGeneratedTempPassword("");
   };
 
   const handleSavePatientProfile = async (id: string) => {
@@ -1246,7 +1471,8 @@ export default function App() {
           clinicalNotes: editPatientClinicalNotes,
           sessionPrice: editPatientSessionPrice,
           paymentStatus: editPatientPaymentStatus,
-          manualStatus: editPatientManualStatus
+          manualStatus: editPatientManualStatus,
+          forceProfileUpdate: editPatientForceProfileUpdate
         })
       });
       if (response.ok) {
@@ -1903,131 +2129,267 @@ export default function App() {
                     </div>
 
                     {/* Welcome message */}
-                    <div className="space-y-1 pt-2">
+                    <div className="space-y-1 pt-2 text-center">
                       <h3 className="text-md font-semibold text-[#2F4738] tracking-tight">
-                        {isRegistering ? "Criar meu Cadastro" : "Bem-vinda!"}
+                        {isRecoveringPassword ? "Recuperar Acesso" : isRegistering ? "Criar meu Cadastro" : "Bem-vinda!"}
                       </h3>
                       <p className="text-xs text-[#8A8A8A] leading-relaxed">
-                        {isRegistering ? "Faça parte de um espaço de acolhimento e cura" : "Que bom ter você aqui."}
+                        {isRecoveringPassword ? "Código de validação será emitido para restaurar sua senha" : isRegistering ? "Faça parte de um espaço de acolhimento e cura" : "Que bom ter você aqui."}
                       </p>
                     </div>
                   </div>
 
-                  {/* Auth message errors */}
-                  {authError && (
-                    <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800 text-[10px] font-sans flex items-center gap-2 animate-pulse">
-                      <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
-                      <span className="font-medium text-center flex-1">{authError}</span>
-                    </div>
-                  )}
-
-                  {/* FORM FIELDS BODY */}
-                  <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
-                    {isRegistering && (
-                      <div className="space-y-3.5">
-                        {/* Name Input */}
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                            <UserIcon className="w-4 h-4 text-[#D9B8A7]" />
-                          </span>
-                          <input
-                            type="text"
-                            value={authName}
-                            onChange={(e) => setAuthName(e.target.value)}
-                            placeholder="Nome Completo"
-                            className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/25 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
-                          />
+                  {isRecoveringPassword ? (
+                    /* PASSWORD RECOVERY SYSTEM FLOW */
+                    <div className="space-y-4 text-left">
+                      {recoverySuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-800 text-[10px] font-sans flex items-start gap-2.5 animate-fade-in">
+                          <span className="text-emerald-600 font-bold mt-0.5 font-sans">✔</span>
+                          <span className="font-medium leading-normal flex-1">{recoverySuccess}</span>
                         </div>
+                      )}
 
-                        {/* Phone Input */}
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                            <Smartphone className="w-4 h-4 text-[#D9B8A7]" />
-                          </span>
-                          <input
-                            type="text"
-                            value={authPhone}
-                            onChange={(e) => setAuthPhone(e.target.value)}
-                            placeholder="Celular (WhatsApp)"
-                            className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/25 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
-                          />
+                      {authError && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800 text-[10px] font-sans flex items-center gap-2 animate-pulse">
+                          <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
+                          <span className="font-medium text-left flex-1">{authError}</span>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Email Input */}
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                        <Mail className="w-4 h-4 text-[#D9B8A7]" />
-                      </span>
-                      <input
-                        type="email"
-                        value={authEmail}
-                        onChange={(e) => setAuthEmail(e.target.value)}
-                        placeholder="E-mail"
-                        className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
-                      />
-                    </div>
+                      {recoveryStep === "request" ? (
+                        <form onSubmit={handleRequestRecoveryCode} className="space-y-4">
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                              <Mail className="w-4 h-4 text-[#D9B8A7]" />
+                            </span>
+                            <input
+                              type="email"
+                              required
+                              value={recoveryEmail}
+                              onChange={(e) => setRecoveryEmail(e.target.value)}
+                              placeholder="Qual o seu e-mail cadastrado?"
+                              className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                            />
+                          </div>
 
-                    {/* Password Input */}
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                        <Lock className="w-4 h-4 text-[#D9B8A7]" />
-                      </span>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        value={authPassword}
-                        onChange={(e) => setAuthPassword(e.target.value)}
-                        placeholder="Senha"
-                        className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-11 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
-                      />
+                          <button
+                            type="submit"
+                            disabled={recoveryLoading}
+                            className="w-full py-4 bg-[#2F4738] hover:bg-[#1E2822] text-white font-semibold text-xs rounded-full transition-all duration-300 cursor-pointer shadow-md flex items-center justify-center gap-1.5 transform active:scale-98"
+                          >
+                            {recoveryLoading ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <span>Solicitar Código de Segurança</span>
+                                <ArrowRight className="w-4 h-4" />
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      ) : (
+                        <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+                          <div className="relative animate-fade-in">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                              <Mail className="w-4 h-4 text-[#D9B8A7]/40" />
+                            </span>
+                            <input
+                              type="email"
+                              required
+                              disabled
+                              value={recoveryEmail}
+                              className="w-full text-xs text-[#1E2822]/60 bg-zinc-100 border border-[#D9B8A7]/20 py-4 pl-11 pr-4 rounded-2xl cursor-not-allowed font-medium"
+                            />
+                          </div>
+
+                          <div className="space-y-1 font-sans">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider pl-1 font-sans">Código recebido por e-mail</label>
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none font-mono font-bold text-[#D9B8A7] text-[10px]">
+                                # COD
+                              </span>
+                              <input
+                                type="text"
+                                required
+                                maxLength={6}
+                                value={recoveryCode}
+                                onChange={(e) => setRecoveryCode(e.target.value.replace(/\D/g, ""))}
+                                placeholder="Digite o código"
+                                className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-16 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10  focus:outline-none tracking-widest font-mono font-bold"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1 font-sans">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 font-mono tracking-wider pl-1 font-sans">Nova Senha Permanente</label>
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                <Lock className="w-4 h-4 text-[#D9B8A7]" />
+                              </span>
+                              <input
+                                type="password"
+                                required
+                                value={recoveryNewPassword}
+                                onChange={(e) => setRecoveryNewPassword(e.target.value)}
+                                placeholder="Digite sua nova senha"
+                                className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={recoveryLoading}
+                            className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-full transition-all duration-300 cursor-pointer shadow-md flex items-center justify-center gap-1.5 transform active:scale-98"
+                          >
+                            {recoveryLoading ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              "Redefinir Minha Senha"
+                            )}
+                          </button>
+                        </form>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-[#D9B8A7] hover:text-[#2F4738] transition-colors cursor-pointer"
+                        onClick={() => {
+                          setIsRecoveringPassword(false);
+                          setRecoveryStep("request");
+                          setAuthError("");
+                          setRecoverySuccess("");
+                        }}
+                        className="w-full py-2 text-center text-xs font-semibold text-[#556B5D] hover:text-[#2F4738] hover:underline cursor-pointer"
                       >
-                        {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                        ← Voltar para o Login
                       </button>
                     </div>
-
-                    {/* Remember-me & Forgot Password row */}
-                    {!isRegistering && (
-                      <div className="flex items-center justify-between text-xs px-1">
-                        <label className="flex items-center gap-2 text-[#8A8A8A] cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={rememberMe}
-                            onChange={(e) => setRememberMe(e.target.checked)}
-                            className="rounded border-[#D9B8A7] text-[#2F4738] focus:ring-[#2F4738]/20 w-4 h-4"
-                          />
-                          <span>Lembrar-me</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => alert("As instruções de recuperação de acesso foram encaminhadas ao seu endereço de e-mail cadastrado.")}
-                          className="text-[#D9B8A7] hover:text-[#C49B85] font-semibold transition-all hover:underline"
-                        >
-                          Esqueci minha senha
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ENTER ACTION BUTTON */}
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full py-4 mt-2 bg-[#2F4738] hover:bg-[#1E2822] text-white font-semibold text-xs rounded-full transition-all duration-300 cursor-pointer shadow-md shadow-[#2F4738]/20 flex items-center justify-center gap-1.5 group transform active:scale-98"
-                    >
-                      {loading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <span>{isRegistering ? "Criar Conta & Entrar" : "Entrar"}</span>
-                          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                        </>
+                  ) : (
+                    /* ORIGINAL AUTHENTICATION VIEW */
+                    <>
+                      {/* Auth message errors */}
+                      {authError && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800 text-[10px] font-sans flex items-center gap-2 animate-pulse">
+                          <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
+                          <span className="font-medium text-center flex-1">{authError}</span>
+                        </div>
                       )}
-                    </button>
-                  </form>
+
+                      {/* FORM FIELDS BODY */}
+                      <form onSubmit={isRegistering ? handleRegister : handleLogin} className="space-y-4">
+                        {isRegistering && (
+                          <div className="space-y-3.5">
+                            {/* Name Input */}
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                <UserIcon className="w-4 h-4 text-[#D9B8A7]" />
+                              </span>
+                              <input
+                                type="text"
+                                value={authName}
+                                onChange={(e) => setAuthName(e.target.value)}
+                                placeholder="Nome Completo"
+                                className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/25 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                              />
+                            </div>
+
+                            {/* Phone Input */}
+                            <div className="relative">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                                <Smartphone className="w-4 h-4 text-[#D9B8A7]" />
+                              </span>
+                              <input
+                                type="text"
+                                value={authPhone}
+                                onChange={(e) => setAuthPhone(e.target.value)}
+                                placeholder="Celular (WhatsApp)"
+                                className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/25 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Email Input */}
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                            <Mail className="w-4 h-4 text-[#D9B8A7]" />
+                          </span>
+                          <input
+                            type="email"
+                            value={authEmail}
+                            onChange={(e) => setAuthEmail(e.target.value)}
+                            placeholder="E-mail"
+                            className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                          />
+                        </div>
+
+                        {/* Password Input */}
+                        <div className="relative">
+                          <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                            <Lock className="w-4 h-4 text-[#D9B8A7]" />
+                          </span>
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            value={authPassword}
+                            onChange={(e) => setAuthPassword(e.target.value)}
+                            placeholder="Senha"
+                            className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/30 py-4 pl-11 pr-11 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/10 focus:outline-none transition-all placeholder:text-[#8A8A8A]/50 font-medium"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-[#D9B8A7] hover:text-[#2F4738] transition-colors cursor-pointer"
+                          >
+                            {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                          </button>
+                        </div>
+
+                        {/* Remember-me & Forgot Password row */}
+                        {!isRegistering && (
+                          <div className="flex items-center justify-between text-xs px-1">
+                            <label className="flex items-center gap-2 text-[#8A8A8A] cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                                className="rounded border-[#D9B8A7] text-[#2F4738] focus:ring-[#2F4738]/20 w-4 h-4"
+                              />
+                              <span>Lembrar-me</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsRecoveringPassword(true);
+                                setRecoveryStep("request");
+                                setRecoveryEmail(authEmail);
+                                setAuthError("");
+                                setRecoverySuccess("");
+                              }}
+                              className="text-[#D9B8A7] hover:text-[#C49B85] font-semibold transition-all hover:underline cursor-pointer"
+                            >
+                              Esqueci minha senha
+                            </button>
+                          </div>
+                        )}
+
+                        {/* ENTER ACTION BUTTON */}
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="w-full py-4 mt-2 bg-[#2F4738] hover:bg-[#1E2822] text-white font-semibold text-xs rounded-full transition-all duration-300 cursor-pointer shadow-md shadow-[#2F4738]/20 flex items-center justify-center gap-1.5 group transform active:scale-98"
+                        >
+                          {loading ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <span>{isRegistering ? "Criar Conta & Entrar" : "Entrar"}</span>
+                              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    </>
+                  )}
 
                   {/* DIVIDER */}
                   <div className="relative my-4">
@@ -2085,6 +2447,162 @@ export default function App() {
 
                 </div>
               )}
+            </div>
+          </div>
+        ) : currentUser.isTemporaryPassword ? (
+          /* REGRA DE NEGÓCIO DE SENHA TEMPORÁRIA DE ACESSO EXCLUSIVO */
+          <div className="flex-1 w-full max-w-md mx-auto flex flex-col justify-center items-center py-8 p-4 font-sans select-none text-left">
+            <div className="bg-white rounded-3xl p-6 w-full border border-zinc-200/80 shadow-2xl flex flex-col space-y-5 animate-fade-in text-left">
+              <div className="text-center space-y-2">
+                <span className="p-3 bg-rose-50 rounded-2xl text-rose-600 inline-block shadow-xs animate-pulse">
+                  <Lock className="w-5.5 h-5.5" />
+                </span>
+                <h3 className="text-md font-bold text-zinc-900 tracking-tight text-center">Definir Senha Permanente</h3>
+                <p className="text-[11.5px] text-zinc-500 leading-relaxed text-center">
+                  Seu login foi realizado utilizando uma <strong>senha temporária</strong>. Para a segurança dos seus dados de prontuário, você precisa criar uma nova senha definitiva e exclusiva.
+                </p>
+              </div>
+
+              {tempPassError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800 text-[10px] font-sans flex items-center gap-2 text-left animate-shake">
+                  <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
+                  <span className="font-medium text-left flex-grow">{tempPassError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSavePermanentPassword} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="block text-[9.5px] uppercase font-bold text-slate-500 font-mono pl-1">Nova Senha Permanente *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                      <Lock className="w-4 h-4 text-[#D9B8A7]" />
+                    </span>
+                    <input
+                      type="password"
+                      placeholder="Mínimo de 6 caracteres"
+                      required
+                      value={tempNewPassword}
+                      onChange={(e) => setTempNewPassword(e.target.value)}
+                      className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/35 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/15 focus:outline-none transition-all placeholder:text-[#8A8A8A]/40 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[9.5px] uppercase font-bold text-slate-500 font-mono pl-1">Confirmar Nova Senha *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                      <Lock className="w-4 h-4 text-[#D9B8A7]" />
+                    </span>
+                    <input
+                      type="password"
+                      placeholder="Repita a nova senha desejada"
+                      required
+                      value={tempConfirmPassword}
+                      onChange={(e) => setTempConfirmPassword(e.target.value)}
+                      className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/35 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/15 focus:outline-none transition-all placeholder:text-[#8A8A8A]/40 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={tempPassLoading}
+                  className="w-full py-3.5 bg-[#2F4738] text-white hover:bg-[#1E2822] font-semibold text-xs rounded-full transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md transform active:scale-98"
+                >
+                  {tempPassLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    "Configurar Senha Permanente"
+                  )}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full py-2 text-center text-xs text-[#556B5D] hover:text-[#2F4738] hover:underline"
+              >
+                Cancelar e Sair da Conta
+              </button>
+            </div>
+          </div>
+        ) : currentUser.forceProfileUpdate ? (
+          /* REGRA DE NEGÓCIO DA ATUALIZAÇÃO REQUERIDA / FORÇADA PELO ADM */
+          <div className="flex-1 w-full max-w-md mx-auto flex flex-col justify-center items-center py-8 p-4 font-sans select-none text-left">
+            <div className="bg-white rounded-3xl p-6 w-full border border-zinc-200/80 shadow-2xl flex flex-col space-y-5 animate-fade-in text-left">
+              <div className="text-center space-y-2">
+                <span className="p-3 bg-emerald-50 rounded-2xl text-[#2F4738] inline-block shadow-xs">
+                  <UserIcon className="w-5.5 h-5.5" />
+                </span>
+                <h3 className="text-md font-bold text-zinc-900 tracking-tight text-center">Atualização Cadastral Requerida</h3>
+                <p className="text-[11.5px] text-zinc-500 leading-relaxed text-center">
+                  A <strong>Dra. Elieyd Barreto</strong> solicitou que você atualize os seguintes campos essenciais para garantir conformidade e continuidade do seu acompanhamento clínico.
+                </p>
+              </div>
+
+              {profileUpdateError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-800 text-[10px] font-sans flex items-center gap-2 text-left animate-shake">
+                  <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
+                  <span className="font-medium text-left flex-grow">{profileUpdateError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveForcedProfile} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="block text-[9.5px] uppercase font-bold text-slate-500 font-mono pl-1">Seu E-mail Atualizado *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                      <Mail className="w-4 h-4 text-[#D9B8A7]" />
+                    </span>
+                    <input
+                      type="email"
+                      required
+                      placeholder="seu@email.com"
+                      value={forcedEmail}
+                      onChange={(e) => setForcedEmail(e.target.value)}
+                      className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/35 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/15 focus:outline-none transition-all placeholder:text-[#8A8A8A]/40 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[9.5px] uppercase font-bold text-slate-500 font-mono pl-1">Número de Celular (WhatsApp) *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                      <Smartphone className="w-4 h-4 text-[#D9B8A7]" />
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      placeholder="(DD) 99999-9999"
+                      value={forcedPhone}
+                      onChange={(e) => setForcedPhone(e.target.value)}
+                      className="w-full text-xs text-[#1E2822] bg-[#FAF8F6] border border-[#D9B8A7]/35 py-3.5 pl-11 pr-4 rounded-2xl focus:border-[#2F4738] focus:ring-1 focus:ring-[#2F4738]/15 focus:outline-none transition-all placeholder:text-[#8A8A8A]/40 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={profileUpdateLoading}
+                  className="w-full py-3.5 bg-[#2F4738] text-white hover:bg-[#1E2822] font-semibold text-xs rounded-full transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md transform active:scale-98"
+                >
+                  {profileUpdateLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    "Confirmar e Salvar Cadastro"
+                  )}
+                </button>
+              </form>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full py-2 text-center text-xs text-[#556B5D] hover:text-[#2F4738] hover:underline"
+              >
+                Fazer Logout
+              </button>
             </div>
           </div>
         ) : (currentUser.role === "admin" && !isAdminViewingAsPatient) ? (
@@ -2698,6 +3216,88 @@ export default function App() {
                           <p className="text-[9px] text-zinc-400 mt-1 leading-normal font-sans">
                             Por padrão, o sistema monitora e atualiza os status de forma automatizada com base no comparecimento clínico e agendamentos.
                           </p>
+                        </div>
+
+                        {/* SECTION: FORÇAR ATUALIZAÇÃO CADASTRAL */}
+                        <div className="bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100 flex items-start gap-2.5 text-left">
+                          <input
+                            type="checkbox"
+                            id="editPatientForceProfileUpdate"
+                            checked={editPatientForceProfileUpdate}
+                            onChange={(e) => setEditPatientForceProfileUpdate(e.target.checked)}
+                            className="rounded border-zinc-300 text-[#2F4738] focus:ring-[#2F4738]/20 w-4 h-4 mt-0.5 cursor-pointer"
+                          />
+                          <label htmlFor="editPatientForceProfileUpdate" className="flex-1 cursor-pointer select-none text-left">
+                            <span className="block text-[11px] font-bold text-[#1E2E24] leading-tight text-left">
+                              Forçar atualização cadastral
+                            </span>
+                            <span className="block text-[9.5px] text-zinc-500 mt-0.5 leading-normal text-left">
+                              O paciente precisará confirmar/atualizar seu celular e e-mail obrigatoriamente logo no próximo login para conseguir navegar.
+                            </span>
+                          </label>
+                        </div>
+
+                        {/* SECTION: ALTERAÇÃO DE ACESSO / SENHA TEMPORÁRIA */}
+                        <div className="bg-zinc-50 p-3.5 rounded-2xl border border-zinc-200/80 space-y-2 text-left">
+                          <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono text-left">
+                            Acesso & Segurança
+                          </span>
+                          <p className="text-[9.5px] text-zinc-500 leading-normal text-left">
+                            Libere o acesso rápido para este paciente gerando uma senha temporária automática. Ela exigirá a criação de uma senha forte permanente no primeiro acesso.
+                          </p>
+
+                          {generatedTempPassword ? (
+                            <div className="bg-amber-50 border border-amber-200/70 p-2.5 rounded-xl space-y-1.5 animate-fade-in text-left">
+                              <span className="block text-[9px] uppercase tracking-widest font-mono text-amber-700 font-semibold text-left">
+                                Senha temporária gerada:
+                              </span>
+                              <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-amber-200">
+                                <span className="font-mono text-xs font-bold text-amber-900 tracking-wider">
+                                  {generatedTempPassword}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(generatedTempPassword);
+                                    alert("Senha copiada para a área de transferência!");
+                                  }}
+                                  className="text-[10px] text-amber-850 font-bold hover:underline cursor-pointer"
+                                >
+                                  Copiar
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={tempPasswordLoading}
+                              onClick={async () => {
+                                setTempPasswordLoading(true);
+                                try {
+                                  const response = await fetch(`/api/patients/${editingPatient.id}/temporary-password`, {
+                                    method: "POST"
+                                  });
+                                  if (response.ok) {
+                                    const data = await response.json();
+                                    setGeneratedTempPassword(data.tempPassword);
+                                  } else {
+                                    alert("Falha ao gerar senha temporária.");
+                                  }
+                                } catch (err) {
+                                  alert("Erro de comunicação ao gerar senha.");
+                                } finally {
+                                  setTempPasswordLoading(false);
+                                }
+                              }}
+                              className="w-full py-2.5 px-3 bg-[#2F4738]/10 hover:bg-[#2F4738]/15 text-[#2F4738] font-bold text-[10.5px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                            >
+                              {tempPasswordLoading ? (
+                                <div className="w-3.5 h-3.5 border border-[#2F4738] border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                "Gerar Senha Temporária"
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
 

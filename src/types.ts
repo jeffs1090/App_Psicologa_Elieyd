@@ -63,6 +63,8 @@ export interface User {
   sessionPrice?: number;
   paymentStatus?: 'em_dia' | 'devendo';
   manualStatus?: 'ativo' | 'sem_sessao' | 'agendado' | 'ausente' | 'desistiu';
+  forceProfileUpdate?: boolean;
+  isTemporaryPassword?: boolean;
 }
 
 export interface SessionNote {

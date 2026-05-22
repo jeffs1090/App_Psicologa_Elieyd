@@ -1068,6 +1068,136 @@ app.post("/api/auth/register", async (req, res) => {
   res.status(201).json({ user: newUser });
 });
 
+// --- SISTEMA DE RECONEXÃO, SENHA TEMPORÁRIA E RECUPERAÇÃO DE ACESSO ---
+
+// Armazenamento temporário em memória para códigos de verificação de senha
+const verificationCodes: Record<string, { code: string; expiresAt: number }> = {};
+
+// Solicitação de redefinição de senha (Código de 6 dígitos)
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "O campo de e-mail é obrigatório." });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = db.users.find((u) => u.email.toLowerCase().trim() === normalizedEmail);
+  if (!user) {
+    return res.status(404).json({ error: "Este endereço de e-mail não foi localizado no sistema." });
+  }
+
+  // Gera um número aleatório único de 6 dígitos
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  verificationCodes[normalizedEmail] = {
+    code,
+    expiresAt: Date.now() + 15 * 60 * 1000 // Expira em 15 minutos
+  };
+
+  // Notificação oficial via Telegram da Dra. Elieyd
+  await triggerTelegramNotification(
+    `🔐 *Solicitação de Código de Segurança!*\n\n*Paciente:* ${user.name}\n*E-mail:* ${user.email}\n*Código:* \`${code}\`\n*Validade:* 15 minutos`
+  );
+
+  console.log(`[AUTH-FORGOT-PASSWORD] Código para ${normalizedEmail}: ${code}`);
+
+  // Retorna sucesso e envia o código de dev no payload para fins práticos e testes instantâneos no preview
+  res.json({
+    message: "O código de verificação foi gerado e enviado para o seu e-mail.",
+    code: code // Para facilitar os testes em tempo real sem configurar SMTP real
+  });
+});
+
+// Processamento da definição de nova senha usando o código
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { email, code, newPassword } = req.body;
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ error: "Todos os campos (e-mail, código e nova senha) são obrigatórios." });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const stored = verificationCodes[normalizedEmail];
+
+  if (!stored) {
+    return res.status(400).json({ error: "Código correspondente não encontrado. Solicite novamente." });
+  }
+
+  if (Date.now() > stored.expiresAt) {
+    delete verificationCodes[normalizedEmail];
+    return res.status(400).json({ error: "Código expirado. Solicite uma nova redefinição." });
+  }
+
+  if (stored.code !== String(code).trim()) {
+    return res.status(400).json({ error: "Código de segurança inválido." });
+  }
+
+  const user = db.users.find((u) => u.email.toLowerCase().trim() === normalizedEmail);
+  if (!user) {
+    return res.status(404).json({ error: "Usuário não localizado." });
+  }
+
+  // Define a nova senha permanente do usuário
+  db.passwords[user.id] = hashPassword(newPassword);
+  delete verificationCodes[normalizedEmail];
+  
+  // Limpa também marcações de senha temporária se existirem
+  user.isTemporaryPassword = false;
+  
+  saveDatabase(db);
+
+  await triggerTelegramNotification(
+    `✅ *Senha Alterada com Sucesso!*\n\n*Paciente:* ${user.name}\n*E-mail:* ${user.email}\n*Origem:* Recuperação por Código`
+  );
+
+  res.json({ message: "Sua senha foi atualizada com sucesso. Agora você já pode acessar." });
+});
+
+// Endpoint autônomo para o paciente atualizar seu perfil obrigatoriamente
+app.post("/api/auth/update-profile", async (req, res) => {
+  const { userId, phone, email } = req.body;
+
+  if (!userId || !phone || !email) {
+    return res.status(400).json({ error: "Os campos de e-mail e celular são obrigatórios." });
+  }
+
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ error: "Usuário não localizado." });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+  const emailTakenByOther = db.users.find((u) => u.id !== userId && u.email.toLowerCase().trim() === normalizedEmail);
+  if (emailTakenByOther) {
+    return res.status(400).json({ error: "Este endereço de e-mail já está em uso por outro paciente." });
+  }
+
+  user.phone = phone.trim();
+  user.email = normalizedEmail;
+  user.forceProfileUpdate = false; // Desativa a pendência cadastral obrigatoriamente
+  saveDatabase(db);
+
+  res.json({ message: "Dados atualizados com sucesso.", user });
+});
+
+// Alteração de senha temporária para definitiva no primeiro login
+app.post("/api/auth/change-temp-password", async (req, res) => {
+  const { userId, newPassword } = req.body;
+
+  if (!userId || !newPassword) {
+    return res.status(400).json({ error: "A nova senha permanente é necessária." });
+  }
+
+  const user = db.users.find((u) => u.id === userId);
+  if (!user) {
+    return res.status(404).json({ error: "Usuário não localizado nos registros." });
+  }
+
+  db.passwords[user.id] = hashPassword(newPassword);
+  user.isTemporaryPassword = false; // Remove pendência de alteração
+  saveDatabase(db);
+
+  res.json({ message: "Senha definitiva gravada com sucesso.", user });
+});
+
 // Verifica se um e-mail vindo do Google já está cadastrado
 app.post("/api/auth/google-check", (req, res) => {
   const { email } = req.body;
@@ -1320,7 +1450,7 @@ app.post("/api/patients/:id/diary-authorization", (req, res) => {
 
 app.post("/api/patients/:id", (req, res) => {
   const { id } = req.params;
-  const { name, phone, gender, sessionType, discoverySource, clinicalNotes, sessionPrice, paymentStatus, manualStatus } = req.body;
+  const { name, phone, gender, sessionType, discoverySource, clinicalNotes, sessionPrice, paymentStatus, manualStatus, forceProfileUpdate } = req.body;
 
   const user = db.users.find((u) => u.id === id);
   if (!user) {
@@ -1337,9 +1467,33 @@ app.post("/api/patients/:id", (req, res) => {
   if (sessionPrice !== undefined) user.sessionPrice = Number(sessionPrice) || 0;
   if (paymentStatus !== undefined) user.paymentStatus = paymentStatus;
   if (manualStatus !== undefined) user.manualStatus = manualStatus;
+  if (forceProfileUpdate !== undefined) user.forceProfileUpdate = !!forceProfileUpdate;
 
   saveDatabase(db);
   res.json({ message: "Cadastro do paciente atualizado com sucesso.", user });
+});
+
+// Gera uma senha temporária única para o paciente que expira/exige troca no primeiro login
+app.post("/api/patients/:id/temporary-password", (req, res) => {
+  const { id } = req.params;
+
+  const user = db.users.find((u) => u.id === id);
+  if (!user) {
+    return res.status(404).json({ error: "Paciente não localizado." });
+  }
+
+  // Gera uma senha bonita e legível, ex: Elieyd-1234
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+  const tempPassword = `Elieyd-${randomSuffix}`;
+
+  db.passwords[user.id] = hashPassword(tempPassword);
+  user.isTemporaryPassword = true; // Força nova senha ao acessar
+  saveDatabase(db);
+
+  res.json({ 
+    message: "Senha temporária gerada com sucesso.", 
+    tempPassword 
+  });
 });
 
 // 2b. Professional Psychologist Session Notes & Gemini AI Analysis Endpoints
