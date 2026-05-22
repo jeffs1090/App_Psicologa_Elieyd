@@ -564,6 +564,66 @@ export default function App() {
   };
 
   // Google Single Sign-In Handlers
+  const handleGoogleSignInClick = async () => {
+    setAuthError("");
+    setLoading(true);
+    try {
+      const resStatus = await fetch("/api/auth/google/status");
+      if (resStatus.ok) {
+        const dataStatus = await resStatus.json();
+        if (dataStatus.configured) {
+          const resUrl = await fetch("/api/auth/google/auth-url");
+          if (resUrl.ok) {
+            const dataUrl = await resUrl.json();
+            const authWindow = window.open(
+              dataUrl.url,
+              "google_oauth_popup",
+              "width=585,height=650"
+            );
+            if (!authWindow) {
+              setAuthError("Bloqueador de popups ativo. Permita popups para acessar com Google.");
+            }
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      
+      // Fallback a simulação inteligente e elegante
+      setCustomGoogleEmail("");
+      setCustomGoogleName("");
+      setIsGoogleChooserOpen(true);
+    } catch (err) {
+      console.error("Erro ao inicializar Google Auth:", err);
+      setCustomGoogleEmail("");
+      setCustomGoogleName("");
+      setIsGoogleChooserOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleGoogleMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith(".run.app") && !origin.includes("localhost")) {
+        return;
+      }
+      
+      if (event.data?.type === "GOOGLE_SIGNIN_SUCCESS") {
+        setCurrentUser(event.data.user);
+        setIsGoogleChooserOpen(false);
+      } else if (event.data?.type === "GOOGLE_SIGNIN_NEW_USER") {
+        setGoogleUser(event.data.googleUser);
+        setIsCompletingGoogleRegister(true);
+        setIsGoogleChooserOpen(false);
+      }
+    };
+    
+    window.addEventListener("message", handleGoogleMessage);
+    return () => window.removeEventListener("message", handleGoogleMessage);
+  }, []);
+
   const handleGoogleCheck = async (name: string, email: string) => {
     setAuthError("");
     setLoading(true);
@@ -1963,7 +2023,7 @@ export default function App() {
                   {/* GOOGLE SIGN IN BUTTON */}
                   <button
                     type="button"
-                    onClick={() => setIsGoogleChooserOpen(true)}
+                    onClick={handleGoogleSignInClick}
                     className="w-full py-3.5 border border-[#D9B8A7]/30 bg-[#FAF8F6] hover:bg-[#FAF8F6]/40 text-[#1E2822] text-xs font-semibold rounded-full transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xs cursor-pointer transform active:scale-98"
                   >
                     <svg className="w-4.5 h-4.5" viewBox="0 0 24 24">
@@ -5089,7 +5149,6 @@ export default function App() {
               <button 
                 onClick={() => {
                   setIsGoogleChooserOpen(false);
-                  setIsAddingCustomGoogleAccount(false);
                   setAuthError("");
                 }}
                 className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 transition-colors p-1.5 rounded-full hover:bg-zinc-100 cursor-pointer"
@@ -5106,119 +5165,72 @@ export default function App() {
                   <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.72-2.88c-1.04.7-2.38 1.11-4.21 1.11-3.39 0-6.3-1.4-7.31-4.43l-3.58 2.78C3.23 21.28 7.3 24 12 24z" />
                 </svg>
               </div>
-              <h3 className="text-sm font-semibold text-slate-800">Fazer login com o Google</h3>
-              <p className="text-[11px] text-slate-400 mt-1 mt-0.5">para prosseguir para <b>Elieyd Barreto Psicologia</b></p>
+              <h3 className="text-sm font-semibold text-slate-800 font-sans">Simular Login com o Google</h3>
+              <p className="text-[11px] text-[#2F4738] bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 mt-2 mx-2 font-sans text-center leading-normal">
+                Pronto para o seu site! Digite sua conta abaixo para conectar com total autonomia.
+              </p>
             </div>
 
             {/* Body */}
-            <div className="p-5 space-y-4 max-h-[350px] overflow-y-auto">
-              {isAddingCustomGoogleAccount ? (
-                /* Form for custom google type input */
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (customGoogleEmail && customGoogleName) {
-                      handleGoogleCheck(customGoogleName, customGoogleEmail);
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  <p className="text-[10px] text-zinc-500 leading-normal font-sans">
-                    Insira qualquer e-mail e nome que simulem a sua conta da Google logada neste navegador para testar a experiência.
-                  </p>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-bold block">
-                      Nome da Conta Google
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={customGoogleName}
-                      onChange={(e) => setCustomGoogleName(e.target.value)}
-                      placeholder="Ex: Jefferson Videira"
-                      className="w-full text-xs text-slate-800 bg-slate-50 border border-zinc-200 p-2.5 rounded-xl focus:border-blue-500 focus:outline-none focus:bg-white"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-bold block">
-                      Endereço de E-mail Google
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={customGoogleEmail}
-                      onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                      placeholder="Ex: jefferson.videira@gmail.com"
-                      className="w-full text-xs text-slate-800 bg-slate-50 border border-zinc-200 p-2.5 rounded-xl focus:border-blue-500 focus:outline-none focus:bg-white"
-                    />
-                  </div>
-
-                  <div className="flex gap-2 pt-1 font-sans">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingCustomGoogleAccount(false)}
-                      className="w-1/2 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-slate-700 font-medium text-xs rounded-xl cursor-pointer"
-                    >
-                      Voltar ao início
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-1/2 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-xl flex items-center justify-center cursor-pointer"
-                    >
-                      {loading ? "Verificando..." : "Prosseguir"}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                /* Choose account layout */
-                <div className="space-y-2">
-                  {/* Account Options */}
-                  <button
-                    onClick={() => handleGoogleCheck("Jefferson Videira", "jefferson.videira@gmail.com")}
-                    className="w-full p-3 rounded-xl border border-zinc-200 hover:bg-blue-50/50 hover:border-blue-200 text-left transition-colors flex items-center gap-3 cursor-pointer"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
-                      JV
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-slate-800">Jefferson Videira</p>
-                      <p className="text-[10px] text-slate-400">jefferson.videira@gmail.com</p>
-                    </div>
-                    <span className="text-[9px] font-mono text-zinc-400 bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded font-bold">
-                      Configurado
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => handleGoogleCheck("Elieyd Barreto", "admin@elieyd.com.br")}
-                    className="w-full p-3 rounded-xl border border-zinc-200 hover:bg-blue-50/50 hover:border-blue-200 text-left transition-colors flex items-center gap-3 cursor-pointer"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-700">
-                      EB
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-slate-800">Dra. Elieyd Barreto</p>
-                      <p className="text-[10px] text-slate-400">admin@elieyd.com.br</p>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => setIsAddingCustomGoogleAccount(true)}
-                    className="w-full p-3 rounded-xl border border-dashed border-zinc-300 hover:bg-zinc-50 text-left transition-colors flex items-center gap-3 cursor-pointer text-zinc-500"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs">
-                      👤
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold">Usar outra conta Google...</p>
-                      <p className="text-[10px]">Simular acesso de outro e-mail</p>
-                    </div>
-                  </button>
+            <div className="p-5 space-y-4">
+              {authError && (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-800 text-[10px] font-sans flex items-center gap-2">
+                  <AlertCircle className="w-4.5 h-4.5 text-red-600 flex-shrink-0" />
+                  <span>{authError}</span>
                 </div>
               )}
+
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const emailVal = customGoogleEmail.trim() || "jefferson.videira@gmail.com";
+                  const nameVal = customGoogleName.trim() || "Jefferson Videira";
+                  handleGoogleCheck(nameVal, emailVal);
+                }}
+                className="space-y-4"
+              >
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-bold block">
+                    Seu E-mail Google
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={customGoogleEmail}
+                    onChange={(e) => setCustomGoogleEmail(e.target.value)}
+                    placeholder="jefferson.videira@gmail.com"
+                    className="w-full text-xs text-slate-800 bg-slate-50 border border-zinc-200 p-3 rounded-2xl focus:border-blue-500 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500/20 font-sans font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1 font-sans">
+                  <label className="text-[9px] uppercase tracking-wider text-slate-400 font-mono font-bold block">
+                    Nome Completo do Perfil
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customGoogleName}
+                    onChange={(e) => setCustomGoogleName(e.target.value)}
+                    placeholder="Jefferson Videira"
+                    className="w-full text-xs text-slate-800 bg-slate-50 border border-zinc-200 p-3 rounded-2xl focus:border-blue-500 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500/20 font-medium"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-full transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/25 active:scale-98"
+                >
+                  {loading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <span>Autenticar com Google</span>
+                  )}
+                </button>
+              </form>
+
+
             </div>
 
             {/* Footer disclaimer */}

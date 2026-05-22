@@ -1105,6 +1105,158 @@ app.post("/api/auth/google-register", async (req, res) => {
   res.status(201).json({ user: newUser });
 });
 
+// Retorna se as credenciais de autenticação Google estão configuradas
+app.get("/api/auth/google/status", (req, res) => {
+  const clientId = db.config?.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = db.config?.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  res.json({ configured: !!(clientId && clientSecret) });
+});
+
+// Gera a URL de login do Google para pacientes
+app.get("/api/auth/google/auth-url", (req, res) => {
+  const clientId = db.config?.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    return res.status(400).json({ error: "GOOGLE_CLIENT_ID não configurado." });
+  }
+  const hostUrl = getConfigValue("APP_URL") || `${req.protocol}://${req.get("host")}`;
+  const redirectUri = `${hostUrl}/api/auth/google/callback`;
+  const scopes = [
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ].join(" ");
+
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: scopes,
+    prompt: "select_account"
+  }).toString();
+
+  res.json({ url });
+});
+
+// Endpoint de Callback de redirecionamento para o fluxo do paciente Google
+app.get("/api/auth/google/callback", async (req, res) => {
+  const { code, error } = req.query;
+  if (error) {
+    return res.send(`
+      <html>
+        <body style="font-family: sans-serif; text-align: center; padding: 40px; color: #721c24; background-color: #f8d7da;">
+          <h2>Erro na Autenticação Google</h2>
+          <p>${error}</p>
+          <button onclick="window.close()" style="padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">Fechar Aba</button>
+        </body>
+      </html>
+    `);
+  }
+  if (!code) {
+    return res.status(400).send("Código não recebido.");
+  }
+
+  const clientId = db.config?.GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = db.config?.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.status(400).send("Configuração Google (Client ID / Client Secret) ausente.");
+  }
+
+  const hostUrl = getConfigValue("APP_URL") || `${req.protocol}://${req.get("host")}`;
+  const redirectUri = `${hostUrl}/api/auth/google/callback`;
+
+  try {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code"
+      })
+    });
+
+    if (!tokenRes.ok) {
+      const errTxt = await tokenRes.text();
+      console.error("Token exchange failed:", errTxt);
+      throw new Error("Falha ao obter tokens do Google.");
+    }
+
+    const tokens = await tokenRes.json();
+    const accessToken = tokens.access_token;
+    if (!accessToken) {
+      throw new Error("Access token não retornado.");
+    }
+
+    // Busca dados do perfil do usuário
+    const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!userInfoRes.ok) {
+      throw new Error("Falha ao obter dados do perfil do Google.");
+    }
+
+    const googleProfile = await userInfoRes.json();
+    const email = googleProfile.email;
+    const name = googleProfile.name || googleProfile.given_name || "Usuário Google";
+
+    if (!email) {
+      throw new Error("E-mail não retornado pelo perfil do Google.");
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = db.users.find((u) => u.email.toLowerCase().trim() === normalizedEmail);
+
+    let scriptContent = "";
+    if (user) {
+      scriptContent = `
+        window.opener.postMessage({ 
+          type: 'GOOGLE_SIGNIN_SUCCESS', 
+          user: ${JSON.stringify(user)} 
+        }, '*');
+      `;
+    } else {
+      scriptContent = `
+        window.opener.postMessage({ 
+          type: 'GOOGLE_SIGNIN_NEW_USER', 
+          googleUser: { name: ${JSON.stringify(name)}, email: ${JSON.stringify(normalizedEmail)} } 
+        }, '*');
+      `;
+    }
+
+    res.send(`
+      <html>
+        <body style="font-family: sans-serif; text-align: center; padding: 40px; background-color: #f7f2ee; color: #2f4738;">
+          <h2 style="font-weight: 600;">Autenticação Concluída</h2>
+          <p>Sua conta Google foi autenticada com sucesso.</p>
+          <p style="font-size: 13px; color: #8a8a8a;">Esta janela será fechada automaticamente em instantes.</p>
+          <script>
+            if (window.opener) {
+              ${scriptContent}
+              window.close();
+            } else {
+              window.location.href = "/";
+            }
+          </script>
+        </body>
+      </html>
+    `);
+
+  } catch (err: any) {
+    console.error("Google login callback error:", err);
+    res.status(500).send(`
+      <html>
+        <body style="font-family: sans-serif; text-align: center; padding: 40px; color: #721c24; background-color: #f8d7da;">
+          <h2>Erro na Autenticação</h2>
+          <p>${err.message || "Erro desconhecido."}</p>
+          <button onclick="window.close()" style="padding: 10px 20px; background-color: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">Fechar Aba</button>
+        </body>
+      </html>
+    `);
+  }
+});
+
 app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
 
