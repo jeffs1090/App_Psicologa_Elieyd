@@ -22,7 +22,7 @@ import {
 // Setup
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const DB_FILE = path.join(process.cwd(), "database.json");
+const DB_FILE = process.env.DATABASE_PATH || path.join(process.cwd(), "database.json");
 
 app.use(express.json());
 
@@ -477,7 +477,7 @@ function saveDatabase(state: DBState) {
   }
 }
 
-const db = loadDatabase();
+let db = loadDatabase();
 
 // Notification helpers (Telegram & Email)
 async function triggerTelegramNotification(message: string) {
@@ -2366,6 +2366,57 @@ app.post("/api/admin/config/test", async (req, res) => {
     gemini,
     calendar
   });
+});
+
+// --- SISTEMA DE BACKUP E RESTAURAÇÃO EXCLUSIVA DO ADMINISTRADOR ---
+
+// Exporta o banco de dados completo no estado bruto em disco, para proteção e re-importação perfeita
+app.get("/api/admin/backup-export", (req, res) => {
+  try {
+    saveDatabase(db); // Força gravação em disco com os dados recentes do runtime
+    if (fs.existsSync(DB_FILE)) {
+      const liveData = fs.readFileSync(DB_FILE, "utf-8");
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", "attachment; filename=backup-consultorio.json");
+      return res.status(200).send(liveData);
+    } else {
+      return res.status(404).json({ error: "Arquivo de banco de dados não localizado." });
+    }
+  } catch (error: any) {
+    return res.status(500).json({ error: `Erro ao exportar dados do consultório: ${error.message}` });
+  }
+});
+
+// Restaura um arquivo de backup completo, recarregando instantaneamente o banco de dados em memória
+app.post("/api/admin/backup-import", (req, res) => {
+  try {
+    const { rawJson } = req.body;
+    if (!rawJson) {
+      return res.status(400).json({ error: "Os dados brutos do arquivo JSON de backup são obrigatórios." });
+    }
+
+    // Validação estrutural de segurança
+    const parsedState = JSON.parse(rawJson);
+    if (!parsedState || typeof parsedState !== "object" || !parsedState.users) {
+      return res.status(400).json({ error: "Estrutura de arquivo corrompida ou inválida para esta aplicação (atributo 'users' ausente)." });
+    }
+
+    // Regra preventiva crucial: Garantir a presença de pelo menos uma conta Admin para evitar travamentos permanentes
+    const administrators = parsedState.users.filter((u: any) => u.role === "admin");
+    if (administrators.length === 0) {
+      return res.status(400).json({ error: "Permissão negada: O arquivo de backup selecionado não possui uma conta administrativa de psicólogo." });
+    }
+
+    // Sobrescreve o arquivo no caminho DB_FILE
+    fs.writeFileSync(DB_FILE, JSON.stringify(parsedState, null, 2), "utf-8");
+
+    // Realiza o re-hotload do middleware em memória do DB
+    db = loadDatabase();
+
+    return res.status(200).json({ message: "backup_success" });
+  } catch (error: any) {
+    return res.status(500).json({ error: `Falha ao importar registros de backup: ${error.message}` });
+  }
 });
 
 app.get("/api/auth/google-calendar/auth-url", (req, res) => {

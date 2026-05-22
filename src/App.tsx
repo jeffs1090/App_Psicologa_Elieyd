@@ -165,6 +165,12 @@ export default function App() {
   const [customGoogleName, setCustomGoogleName] = useState("");
   const [isAddingCustomGoogleAccount, setIsAddingCustomGoogleAccount] = useState(false);
 
+  // Estados de carga e validação para Backup e Restauração de dados do consultório
+  const [backupParseError, setBackupParseError] = useState("");
+  const [backupParseSuccessSummary, setBackupParseSuccessSummary] = useState("");
+  const [backupRawJson, setBackupRawJson] = useState("");
+  const [backupLoading, setBackupLoading] = useState(false);
+
   // Common client data streams
   const [reflections, setReflections] = useState<ReflectiveMessage[]>([]);
   const [availabilities, setAvailabilities] = useState<AvailabilityDay[]>([]);
@@ -1439,6 +1445,107 @@ export default function App() {
       setTimeout(() => setReminderTriggerMessage(null), 6000);
     } finally {
       setTriggeringReminders(false);
+    }
+  };
+
+  // --- CONTROLES DE BACKUP SEGURO & IMPORTAÇÃO ---
+
+  const handleExportBackup = async () => {
+    try {
+      const response = await fetch("/api/admin/backup-export");
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `backup-consultorio-${new Date().toISOString().split("T")[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        const err = await response.json();
+        alert(err.error || "Falha ao gerar arquivo de exportação de dados.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao conectar ao servidor para exportar backup.");
+    }
+  };
+
+  const handleFileChangeForBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBackupParseError("");
+    setBackupParseSuccessSummary("");
+    setBackupRawJson("");
+    
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+
+        if (!parsed || typeof parsed !== "object" || !parsed.users) {
+          setBackupParseError("Erro: Arquivo JSON de backup inválido (campo 'users' obrigatório ausente).");
+          return;
+        }
+
+        const adminsCount = parsed.users.filter((u: any) => u.role === "admin").length;
+        if (adminsCount === 0) {
+          setBackupParseError("Erro de integridade: O arquivo de backup selecionado não contém nenhuma conta de administrador.");
+          return;
+        }
+
+        const patientsCount = parsed.users.filter((u: any) => u.role === "patient").length;
+        const diariesCount = parsed.diary ? parsed.diary.length : 0;
+        const appointmentsCount = parsed.appointments ? parsed.appointments.length : 0;
+
+        setBackupRawJson(text);
+        setBackupParseSuccessSummary(
+          `✓ Arquivo lido com sucesso! Estrutura identificada:\n- ADM: ${adminsCount} administrador(es)\n- Pacientes: ${patientsCount} cadastrado(s)\n- Registros de Diário: ${diariesCount}\n- Histórico de Consultas: ${appointmentsCount}`
+        );
+      } catch (err) {
+        setBackupParseError("Erro crítico: O arquivo selecionado não é um arquivo JSON válido ou está corrompido.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImportBackup = async () => {
+    if (!backupRawJson) return;
+    if (!confirm("⚠️ ATENÇÃO: Restaurar este backup substituirá TODAS as configurações, histórico financeiro, diários e pacientes atuais pelos dados do arquivo selecionado de forma irrecorrível. Deseja prosseguir com a restauração definitiva?")) {
+      return;
+    }
+
+    setBackupLoading(true);
+    try {
+      const response = await fetch("/api/admin/backup-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawJson: backupRawJson })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.message === "backup_success") {
+          alert("✓ Banco de dados importado e restaurado com absoluto sucesso! O sistema recarregará para aplicar as informações.");
+          setBackupParseSuccessSummary("");
+          setBackupRawJson("");
+          window.location.reload();
+        } else {
+          alert(data.error || "Houve uma inconsistência ao restaurar.");
+        }
+      } else {
+        const err = await response.json();
+        alert(err.error || "Operação de restauração interrompida pelo servidor.");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Houve um erro de rede ao tentar se comunicar com a API de restauração.");
+    } finally {
+      setBackupLoading(false);
     }
   };
 
@@ -4033,6 +4140,100 @@ export default function App() {
                   <p className="text-xs text-zinc-500 leading-relaxed font-sans">
                     Gerencie com segurança as variáveis de ambiente das integrações de e-mail, alertas automáticos por Telegram, inteligência artificial e link inteligente do Google Calendar.
                   </p>
+                </div>
+
+                {/* SALVAGUARDA CONTRA PERDAS DE HOSPEDAGEM (RENDER / EPHEMERAL STORAGE) */}
+                <div className="bg-gradient-to-br from-[#2F4738]/5 via-[#2F4738]/2 to-transparent rounded-2xl p-5 border border-[#2F4738]/15 space-y-4 shadow-sm text-left animate-fade-in">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 w-10 h-10 bg-emerald-100 rounded-xl text-[#2F4738] flex items-center justify-center flex-shrink-0">
+                      <ShieldCheck className="w-5 h-5 flex-shrink-0" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide font-sans">
+                        🛡️ Salvaguarda contra Perda de Dados em Deploy/Atualização (Render)
+                      </h4>
+                      <p className="text-[11px] text-zinc-650 leading-relaxed font-sans">
+                        Em provedores de hospedagem sem disco persistente configurado (como o plano padrão do <strong>Render.com</strong>), todos os arquivos locais (como pacientes novos, dados financeiros e diários) são resetados toda vez que a aplicação é atualizada ou reiniciada.
+                      </p>
+                      <p className="text-[10px] text-amber-800 font-semibold leading-relaxed font-sans">
+                        💡 <b>Regra de Ouro:</b> Antes de enviar uma nova versão com melhorias ao site de hospedagem, clique em <b>Baixar Backup do Sistema</b> abaixo para salvar seus dados reais. Logo após a atualização do servidor concluir, acesse este painel, selecione o arquivo gerado e clique em <b>Aplicar e Restaurar</b>. Seus pacientes, variáveis de e-mail, Telegram e histórico financeiro serão restaurados perfeitamente em 2 segundos!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-[#2F4738]/10 text-left">
+                    {/* EXPORT PANEL */}
+                    <div className="bg-white p-4 rounded-xl border border-zinc-150 flex flex-col justify-between space-y-3">
+                      <div className="space-y-1 text-left">
+                        <span className="block text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase text-left">Fase 1: Reservar / Baixar Backup</span>
+                        <p className="text-[10.5px] text-zinc-500 leading-normal text-left">
+                          Efetua o download completo e confidencial dos dados estruturais do consultório em seu computador pessoal.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleExportBackup}
+                        className="w-full py-2.5 px-4 bg-[#2F4738] hover:bg-[#1E2822] text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98 text-center"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Baixar Backup do Sistema (.json)</span>
+                      </button>
+                    </div>
+
+                    {/* IMPORT PANEL */}
+                    <div className="bg-white p-4 rounded-xl border border-zinc-150 flex flex-col justify-between space-y-3 text-left">
+                      <div className="space-y-2 text-left">
+                        <span className="block text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase text-left">Fase 2: Restaurar / Carregar Arquivo</span>
+                        <p className="text-[10.5px] text-zinc-500 leading-normal text-left">
+                          Envie um arquivo de backup baixado anteriormente para repovoar instantaneamente o consultório sem perdas.
+                        </p>
+
+                        <div className="relative border border-dashed border-zinc-200 hover:border-[#2F4738]/50 p-3 rounded-xl transition-all cursor-pointer bg-zinc-50/50 flex flex-col items-center justify-center group focus-within:ring-2 focus-within:ring-[#2F4738]/20">
+                          <input
+                            type="file"
+                            accept=".json"
+                            onChange={handleFileChangeForBackup}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          />
+                          <UploadCloud className="w-5 h-5 text-zinc-400 group-hover:text-[#2F4738] transition-colors mb-1" />
+                          <span className="text-[10px] text-zinc-500 font-medium group-hover:text-zinc-700 font-sans transition-all text-center">
+                            Selecionar arquivo de backup no computador
+                          </span>
+                        </div>
+
+                        {backupParseError && (
+                          <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-lg text-rose-800 text-[9.5px] leading-relaxed flex items-start gap-1.5 animate-pulse font-sans text-left">
+                            <span className="font-bold flex-shrink-0">⚠️</span>
+                            <span>{backupParseError}</span>
+                          </div>
+                        )}
+
+                        {backupParseSuccessSummary && (
+                          <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-900 text-[9px] leading-relaxed whitespace-pre-line flex items-start gap-1.5 animate-fade-in font-mono text-left font-semibold">
+                            <span>{backupParseSuccessSummary}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {backupRawJson && !backupParseError && (
+                        <button
+                          type="button"
+                          disabled={backupLoading}
+                          onClick={handleImportBackup}
+                          className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-98 text-center"
+                        >
+                          {backupLoading ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Aplicar e Restaurar Banco de Dados</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Main panel */}
